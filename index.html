@@ -273,10 +273,10 @@
    ============================================================ */
 
 const CONFIG = {
-  API_BASE:  'https://return-board.vercel.app',
+  API_BASE:  '',
   POLL_MS:   30 * 1000,
   ROTATE_MS: 7 * 1000,
-  STALE_MS:  10 * 60 * 1000,
+  STALE_MS:  10 * 60 * 1000,   // 경쟁사: 이 시간 넘으면 경고
   RELOAD_MS: 6 * 60 * 60 * 1000,
 };
 
@@ -323,7 +323,15 @@ function kstStamp(iso){
   const p = n => String(n).padStart(2,'0');
   return `${k.getMonth()+1}/${k.getDate()}  ${p(k.getHours())}:${p(k.getMinutes())}`;
 }
+/* 경쟁사: 자동 수집이라 10분만 안 와도 이상 → 경고 */
 const isStale = iso => !iso || Date.now() - new Date(iso).getTime() > CONFIG.STALE_MS;
+
+/* 우리 매장: 하루 한 번 넣는 값이라 '오늘 갱신했나'로 판단 (한국시간 기준) */
+function isStaleOurs(iso){
+  if(!iso) return true;
+  const day = d => new Date(d).toLocaleDateString('en-CA',{timeZone:'Asia/Seoul'});
+  return day(iso) !== day(Date.now());
+}
 
 function cell(cls,val,text){
   if(val==null) return `<div class="c ${cls} text">${text||'-'}</div>`;
@@ -355,7 +363,7 @@ function renderOurs(data){
 
   const st=$('#oursStamp');
   st.textContent=kstStamp(data.updatedAt);
-  st.classList.toggle('stale',isStale(data.updatedAt));
+  st.classList.toggle('stale',isStaleOurs(data.updatedAt));
 }
 
 let rotIdx=0, rotTimer=null;
