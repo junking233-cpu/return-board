@@ -368,7 +368,13 @@ function renderOurs(data){
 
 let rotIdx=0, rotTimer=null;
 
-function renderComps(list){
+function renderComps(all){
+  // 오래 갱신 안 된 회사는 로테이션에서 자동 제외
+  // (사이트 구조가 바뀌어 수집이 멈춰도 화면은 멀쩡하게 유지)
+  let list = (all||[]).filter(c => !isStale(c.updatedAt));
+  // 전부 오래됐으면 그냥 다 보여줌 (빈 화면보다는 낫다)
+  if(!list.length) list = all || [];
+
   const wrap=$('#compWrap');
   [...wrap.querySelectorAll('.comp')].forEach(el=>el.remove());
 
