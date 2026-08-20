@@ -11,7 +11,8 @@
 
    요청 형식:
      헤더  x-scraper-token: <SCRAPER_TOKEN>
-     본문  { "company":"A", "rows":[ {item_key,label,buy_price,...}, ... ] }
+     본문  { "company":"A", "rows":[...], "spot": 4524.1 }
+           spot 은 선택 — 있으면 gold_spot 에 한 점 추가 (USD/oz)
    ============================================================ */
 
 const SB_URL = process.env.SUPABASE_URL;
@@ -36,7 +37,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { company, rows } = req.body || {};
+    const { company, rows, spot } = req.body || {};
 
     if (!COMPANIES.includes(company)) {
       return res.status(400).json({ error: 'bad company' });
@@ -92,7 +93,24 @@ export default async function handler(req, res) {
 
     if (!r.ok) throw new Error(`supabase ${r.status}: ${await r.text()}`);
 
-    return res.status(200).json({ ok: true, company, saved: clean.length });
+    // 국제 금시세(USD/oz) — 값이 정상 범위일 때만 한 점 추가
+    let spotSaved = false;
+    if (Number.isFinite(spot) && spot > 100 && spot < 100000) {
+      const sr = await fetch(`${SB_URL}/rest/v1/gold_spot`, {
+        method: 'POST',
+        headers: {
+          apikey: SB_KEY,
+          Authorization: `Bearer ${SB_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal',
+        },
+        body: JSON.stringify([{ price_usd: spot, recorded_at: now }]),
+      });
+      spotSaved = sr.ok;
+      if (!sr.ok) console.error('[save-competitor] spot', sr.status, await sr.text());
+    }
+
+    return res.status(200).json({ ok: true, company, saved: clean.length, spot: spotSaved });
 
   } catch (err) {
     console.error('[save-competitor]', err);

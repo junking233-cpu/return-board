@@ -422,6 +422,22 @@ function renderChart(points){
   if(!W||!H||!points?.length) return;
 
   svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+
+  // 점이 1개뿐이면 선을 그릴 수 없음 - 안내만 표시
+  if(points.length < 2){
+    svg.innerHTML =
+      `<text x="${(W/2).toFixed(0)}" y="${(H/2).toFixed(0)}" fill="#7d766a"
+         font-size="${(H*.13).toFixed(0)}" font-family="Pretendard,sans-serif"
+         text-anchor="middle">데이터 수집 중…</text>`;
+    if(points.length === 1){
+      $('#spotPrice').textContent =
+        points[0].v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+      $('#spotDelta').textContent = '—';
+      $('#spotDelta').className = 'cdelta';
+    }
+    return;
+  }
+
   const padT=H*.10,padB=H*.16,padL=W*.015,padR=W*.085;
   const vals=points.map(p=>p.v);
   const lo=Math.min(...vals),hi=Math.max(...vals),span=(hi-lo)||1;
