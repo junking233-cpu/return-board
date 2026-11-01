@@ -3,13 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>리턴 금거래소 시세판</title>
+<!-- 매장 이름은 스크립트가 THEMES 에서 넣음 -->
+<title>금 시세판</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<!-- 글꼴 CSS 는 화면·스크립트를 막지 않게 읽음 (jsdelivr 가 느리거나 막혀도 기본 글꼴로 시세는 바로 뜸) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css"></noscript>
 <style>
+  /* 아래 값은 리턴 기준. 매장별 값은 스크립트 THEMES 가 덮어씀 */
   :root{
     --gold:#d9b158;
     --gold-hi:#f4dc9d;
+    --gold-rgb:217,177,88;   /* 금색 빛번짐(rgba)용 — --gold 와 같은 색을 숫자로 */
 
     --ink:#f2ede2;
     --ink-2:#cfc8b9;
@@ -22,14 +27,29 @@
     --up:#e0654a;
     --down:#5b9be0;
 
-    /* ── 로고가 잘 안 보이면 여기 세 개만 조절 ──
+    /* 금속 바탕 색 (가장자리 → 가운데) */
+    --metal-1:#6e6a63;
+    --metal-2:#4a4741;
+    --metal-3:#2e2c28;
+    --metal-4:#1a1917;
+    --metal-5:#141312;
+
+    /* ── 로고가 잘 안 보이면 THEMES 의 이 값들만 조절 ──
        --logo-opacity : 로고 진하기 (0~1, 높을수록 진함)
        --logo-fit     : cover(꽉 채움) 또는 contain(전체 보이게)
        --logo-y       : 로고 세로 위치 (숫자 올리면 로고가 아래로)
-       --panel-dark   : 표 검은 배경 (낮출수록 로고 잘 보임 / 높일수록 숫자 잘 읽힘) */
+       --logo-url     : 스크립트가 매장 로고로 채움 (주소가 틀리면 로고 없음) */
+    --logo-url:none;
     --logo-opacity:.85;
     --logo-fit:cover;   /* cover=화면 꽉 채움 / contain=로고 전체가 다 보이게 */
     --logo-y:60%;       /* 로고 세로 위치. 올리면 로고가 내려감 */
+    --logo-filter:saturate(1.05) brightness(1.18) contrast(1.12);
+
+    /* ── 표 칸 바탕 (로고 글자가 숫자 뒤에서 시끄러우면 THEMES 에서 조금 진하게) ──
+       --panel-a1/a2 : 칸 바탕 진하기 (위 → 아래) · --panel-blur : 칸 뒤 로고 흐림 */
+    --panel-a1:.42;
+    --panel-a2:.50;
+    --panel-blur:1.5px;
   }
 
   *{margin:0;padding:0;box-sizing:border-box;}
@@ -48,14 +68,14 @@
 
   /* 1) 세로결 브러시드 메탈 + 가장자리 반사광 */
   #bgMetal{
-    position:fixed;inset:0;z-index:0;
+    position:fixed;top:0;right:0;bottom:0;left:0;z-index:0;
     background:linear-gradient(90deg,
-      #6e6a63 0%, #4a4741 6%, #2e2c28 18%,
-      #1a1917 42%, #141312 50%, #1a1917 58%,
-      #2e2c28 82%, #4a4741 94%, #6e6a63 100%);
+      var(--metal-1) 0%, var(--metal-2) 6%, var(--metal-3) 18%,
+      var(--metal-4) 42%, var(--metal-5) 50%, var(--metal-4) 58%,
+      var(--metal-3) 82%, var(--metal-2) 94%, var(--metal-1) 100%);
   }
   #bgMetal::after{
-    content:'';position:absolute;inset:0;
+    content:'';position:absolute;top:0;right:0;bottom:0;left:0;
     background-image:repeating-linear-gradient(
       0deg,
       rgba(255,255,255,.028) 0px,
@@ -64,20 +84,20 @@
       rgba(0,0,0,.030) 3px);
   }
 
-  /* 2) RG 로고 워터마크 — 정중앙, 두 패널 사이에 걸침 */
+  /* 2) 매장 로고 워터마크 — 정중앙, 두 패널 사이에 걸침 */
   #bgLogo{
-    position:fixed;inset:0;
+    position:fixed;top:0;right:0;bottom:0;left:0;
     z-index:1;
-    background:url('rg-logo.png') center var(--logo-y) / var(--logo-fit) no-repeat;
+    background:var(--logo-url) center var(--logo-y) / var(--logo-fit) no-repeat;
     opacity:var(--logo-opacity);
-    mix-blend-mode:lighten;         /* 원본 PNG의 검은 배경 날림 */
-    filter:saturate(1.05) brightness(1.18) contrast(1.12);
+    mix-blend-mode:lighten;         /* 원본 그림의 어두운 벽을 날림 */
+    filter:var(--logo-filter);
     pointer-events:none;
   }
 
   /* 4) 전체 어둡게 눌러 숫자 가독성 확보 */
   #bgVeil{
-    position:fixed;inset:0;z-index:2;pointer-events:none;
+    position:fixed;top:0;right:0;bottom:0;left:0;z-index:2;pointer-events:none;
     background:radial-gradient(120% 100% at 50% 50%, rgba(0,0,0,.10) 0%, rgba(0,0,0,.34) 100%);
   }
 
@@ -92,14 +112,14 @@
 
   .panel{
     position:relative;
-    background:linear-gradient(165deg, rgba(26,24,21,.42) 0%, rgba(14,13,11,.50) 100%);
-    backdrop-filter:blur(1.5px);
+    background:linear-gradient(165deg, rgba(26,24,21,var(--panel-a1)) 0%, rgba(14,13,11,var(--panel-a2)) 100%);
+    backdrop-filter:blur(var(--panel-blur));
     border-radius:.35vw;overflow:hidden;
     display:flex;flex-direction:column;
   }
   .panel--ours{
     border:.2vw solid var(--gold);
-    box-shadow:0 0 3.5vw rgba(217,177,88,.30), inset 0 0 7vw rgba(217,177,88,.05);
+    box-shadow:0 0 3.5vw rgba(var(--gold-rgb),.30), inset 0 0 7vw rgba(var(--gold-rgb),.05);
   }
   .panel--plain{
     border:.13vw solid rgba(255,255,255,.62);
@@ -110,15 +130,20 @@
     display:flex;align-items:baseline;justify-content:center;
     gap:1.8vw;padding:1.6vh 2vw 1vh;position:relative;
   }
+  /* 장 머리 시각은 오른쪽 「내가 팔때」 숫자 끝에 맞춤 → 제목이 장 한가운데 (두 장 모두 같은 꼴) */
   .ptitle{font-size:3.2vh;font-weight:800;letter-spacing:.3vw;}
-  .panel--ours .ptitle{color:var(--gold-hi);text-shadow:0 0 2.4vh rgba(217,177,88,.6);}
+  .panel--ours .ptitle{color:var(--gold-hi);text-shadow:0 0 2.4vh rgba(var(--gold-rgb),.6);}
   .panel--plain .ptitle{color:#f3eee2;text-shadow:0 0 1.8vh rgba(255,255,255,.3);}
   .pstamp{
-    font-size:1.4vh;font-weight:500;color:var(--muted);
-    letter-spacing:.14vw;font-variant-numeric:tabular-nums;white-space:nowrap;
+    position:absolute;right:2.8vw;bottom:1.15vh;
+    font-size:1.65vh;font-weight:500;color:#a49c8e;
+    letter-spacing:.1vw;font-variant-numeric:tabular-nums;white-space:nowrap;
+    text-shadow:0 .15vh .7vh rgba(0,0,0,.95);
   }
+  .pstamp:empty{display:none;}
   .pstamp.stale{color:var(--up);animation:pulse 1.6s ease-in-out infinite;}
   @keyframes pulse{50%{opacity:.3}}
+  /* 타사 장 머리(.pstamp--notice)의 「10/31 고시」 · 「14:05 기준」 — 하루 한 번 고시라 빨갛게 깜빡이지 않음 (stale 안 붙임) */
   .phead::after{
     content:'';position:absolute;left:2.2vw;right:2.2vw;bottom:0;
     height:1px;background:var(--line);
@@ -127,12 +152,21 @@
   .tbl{flex:1;display:grid;padding:0 2.2vw 1.4vh;}
   .tbl--5{grid-template-rows:auto repeat(5,1fr);}
   .tbl--4{grid-template-rows:auto repeat(4,1fr);}
+  .tbl--one{grid-template-rows:1fr;}
 
   .row{
     display:grid;grid-template-columns:1.15fr 1fr 1fr;
     align-items:center;border-bottom:1px solid var(--line-soft);
   }
   .row:last-child{border-bottom:none;}
+
+  /* 가격 대신 안내 한 줄 (불러오는 중 · 확인 중 · 아직 안 넣음) */
+  .row--msg{
+    display:flex;align-items:center;justify-content:center;
+    border-bottom:none;text-align:center;
+    font-size:3.4vh;font-weight:600;color:var(--ink-2);letter-spacing:.1vw;
+    text-shadow:0 .2vh .9vh rgba(0,0,0,.9);
+  }
 
   .row--head{padding:1.2vh 0;border-bottom:1px solid var(--line);}
   .row--head .c{
@@ -141,7 +175,7 @@
   }
   .row--head .c-item{line-height:1.35;}
   .row--head .sub{
-    display:block;font-size:1.15vh;color:#a49c8e;
+    display:block;font-size:1.35vh;color:#a49c8e;
     font-weight:400;margin-top:.3vh;
     text-shadow:0 .15vh .7vh rgba(0,0,0,.95);
   }
@@ -174,7 +208,7 @@
 
   #compWrap{position:relative;}
   .comp{
-    position:absolute;inset:0;display:flex;flex-direction:column;
+    position:absolute;top:0;right:0;bottom:0;left:0;display:flex;flex-direction:column;
     opacity:0;transition:opacity 1.1s ease-in-out;pointer-events:none;
   }
   .comp.on{opacity:1;}
@@ -191,10 +225,26 @@
 
   #chartPanel{display:flex;flex-direction:column;min-height:0;}
   .chead{
-    display:flex;align-items:center;justify-content:space-between;
-    padding:1.5vh 2.2vw .5vh;
+    display:flex;align-items:flex-start;justify-content:space-between;
+    padding:1.5vh 2.8vw .2vh;   /* 위 타사 장의 글자 줄(2.2vw + 칸 .6vw)과 맞춤 */
   }
+  .cleft{display:flex;flex-direction:column;gap:.7vh;}
   .ctitle{font-size:2vh;font-weight:600;color:var(--ink-2);letter-spacing:.12vw;}
+  /* 「1돈 환산 623,800원 · 참고」 — 손님이 한눈에: 숫자만 금색(우리 팔때·국제 숫자보다 한 단계 아래), 글자는 작고 차분하게 */
+  .cconv{
+    display:flex;align-items:baseline;gap:.45vw;white-space:nowrap;
+    font-size:1.7vh;font-weight:500;color:#a9a192;letter-spacing:.04vw;
+    text-shadow:0 .15vh .7vh rgba(0,0,0,.95);
+  }
+  .cconv b{
+    font-size:2.55vh;font-weight:600;color:var(--gold);letter-spacing:0;
+    font-variant-numeric:tabular-nums;
+    text-shadow:0 .2vh 1vh rgba(0,0,0,.95), 0 0 2vh rgba(0,0,0,.7);
+  }
+  .cconv .u{margin-left:-.3vw;}
+  .cconv .src{font-size:1.25vh;color:var(--muted);margin-left:.3vw;}   /* 환율이 마지막 예비(er-api)일 때만 — 그쪽 무료 조건의 출처 표기 */
+  /* 2시간 넘게 묵으면 숨김 — 같은 꼴의 글(숫자만 —)을 남긴 채 안 보이게만 해서 높이가 그대로 (그래프가 위아래로 안 움직임) */
+  .cconv.off{visibility:hidden;}
   .cnow{display:flex;align-items:baseline;gap:.7vw;}
   .cprice{
     font-size:3.2vh;font-weight:700;color:var(--gold-hi);
@@ -210,11 +260,22 @@
 
   #offline{
     position:fixed;top:0;left:0;right:0;z-index:99;
-    background:var(--up);color:#fff;font-size:1.6vh;font-weight:600;
-    text-align:center;padding:.7vh;
-    transform:translateY(-100%);transition:transform .4s;
+    background:rgba(224,101,74,.94);color:#fff;font-size:1.85vh;font-weight:600;
+    text-align:center;padding:.5vh;
+    box-shadow:0 .3vh 1.2vh rgba(0,0,0,.45);
+    transform:translateY(-110%);transition:transform .4s;
   }
   #offline.show{transform:translateY(0);}
+
+  /* 주소의 매장 이름을 모를 때만 (가격·로고 없이 이 안내만) */
+  #badStore{
+    position:fixed;top:0;right:0;bottom:0;left:0;z-index:4;
+    display:none;flex-direction:column;align-items:center;justify-content:center;
+    gap:2.4vh;text-align:center;padding:4vw;
+  }
+  #badStore.show{display:flex;}
+  #badStore .big{font-size:7vh;font-weight:800;color:#f3eee2;letter-spacing:.3vw;}
+  #badStore .small{font-size:2.2vh;font-weight:500;color:var(--ink-2);line-height:1.6;}
 
   @media (prefers-reduced-motion:reduce){
     *{animation:none !important;transition-duration:.01ms !important;}
@@ -228,6 +289,12 @@
 <div id="bgVeil"></div>
 
 <div id="offline">시세 서버 연결 끊김 — 표시된 가격은 최신이 아닙니다</div>
+
+<div id="badStore">
+  <div class="big">주소를 확인해 주세요</div>
+  <div class="small">주소 끝의 매장 이름을 알 수 없습니다.<br>
+    예) …/?store=sagyejeol · …/?store=geumsarang · 리턴은 주소 끝에 아무것도 없이</div>
+</div>
 
 <div id="board">
 
@@ -252,7 +319,10 @@
 
     <section class="panel panel--plain" id="chartPanel">
       <div class="chead">
-        <div class="ctitle">국제 금시세</div>
+        <div class="cleft">
+          <div class="ctitle">국제 금시세</div>
+          <div class="cconv off" id="spotConv"></div>
+        </div>
         <div class="cnow">
           <span class="cprice" id="spotPrice">—</span>
           <span class="cunit">USD/oz</span>
@@ -266,90 +336,553 @@
 
 <script>
 /* ============================================================
-   리턴 금거래소 시세판
-   데이터: GET {API_BASE}/api/prices  (없으면 DUMMY 폴백)
-   A사=한국금거래소 / B사=한국공인금거래소 / C사=한국표준금거래소
-   (매핑은 주석·DB에만. 화면 노출 금지)
+   금거래소 TV 시세판 — 리턴 · 사계절 · 금사랑이 같은 화면, 배경(로고·색)만 다름
+   주소:  /                   → 리턴 (예전 주소 그대로)
+          /?store=sagyejeol   → 사계절 (별칭 sagye)
+          /?store=geumsarang  → 금사랑 (별칭 geum)
+          그 밖의 값          → 「주소를 확인해 주세요」만 (리턴 값으로 넘어가지 않음)
+                                 (store 키 대소문자는 안 가림 · store 키가 없는데 주소에 다른 매장 이름이 보이면 주소 확인)
+   데이터: GET {API_BASE}/api/prices?store=…&v=2  30초마다 (우리 매장 · 국제 그래프 — 그래프 점은 5분에 한 번)
+             oursEmpty → 「시세를 아직 넣지 않았습니다」 · oursOk:false → 마지막 값 (잇달아 2번이면 끊김 띠) · oursDateOnly → 날짜만
+           GET {API_BASE}/api/competitors      10분마다 (돌려 보기 A사·B사 · 서버가 30분 캐시 · 15초 제한)
+             회사마다 합침 — 응답에 없는(실패한) 회사는 앞 값을 그대로 두고 24시간·4일 규칙으로만 뺌
+             B사가 서버에서 3시간 넘게 안 오면(미국 IP 막힘 등) B사 주소를 화면이 30분에 한 번 직접 읽어 예비로 씀
+               (CONFIG.B_DIRECT 한 줄로 끌 수 있음 · 보낼 때 Referer 안 붙임)
+           GET {API_BASE}/api/spot             10분마다 (국제 금시세 칸의 「1돈 환산 · 참고」 한 줄)
+           요청마다 10초 시간 제한 · 앞 요청이 안 끝났으면 건너뜀 · 1분마다 시계로 다시 그림(자정·4일·24시간·2시간 규칙)
+           신선도 판단은 서버 시각 기준 (TV 시계가 틀려도 타사 장·환산 줄이 사라지지 않게)
+           끊김 띠는 우리 매장 값을 2번 잇달아 못 받았거나 2분 넘게 못 받았을 때만 (한 번 느린 것으로는 안 띄움)
+   미리 보기: /?store=return&src=ledger (또는 board) — 우리 매장 값을 그 출처로 (ledger·board 말고는 무시)
+   타사: 화면엔 A사·B사만 (공개 저장소 · 누구나 소스 보기로 봄 → 회사 이름은 주석·글자에 안 적음)
+         예전 확장 프로그램 값(competitor_prices)과 「국제 시세 환산」 장은 더 안 씀
+   옛 TV 브라우저도 돌게 ??·?. 는 쓰지 않음 (스크립트는 Chrome 63 정도면 됨 · 배경 겹은 inset 대신 top/right/bottom/left)
    ============================================================ */
+
+/* ==== 순수 함수 시작 — DOM 을 안 씀 (rb-test 가 이 사이를 잘라 시험) ==== */
 
 const CONFIG = {
   API_BASE:  '',
   POLL_MS:   30 * 1000,
+  SPOT_MS:   10 * 60 * 1000,             // /api/spot 읽는 간격 (서버도 10분 캐시)
+  COMP_MS:   10 * 60 * 1000,             // /api/competitors 읽는 간격 (서버는 30분 캐시)
+  B_DIRECT: true,                        // B사 예비 직접 읽기 (false 면 안 함 — 실장님 결정에 따라 한 줄)
+  B_DIRECT_MS: 30 * 60 * 1000,           // B사 예비 직접 읽기는 30분에 한 번 이하 (예의)
+  B_SERVER_FRESH_MS: 3 * 60 * 60 * 1000, // 서버가 준 B 가 이보다 오래 전에 받은 것이면 → 직접 읽기 (서버는 보통 30~70분 안)
   ROTATE_MS: 7 * 1000,
-  STALE_MS:  10 * 60 * 1000,   // 경쟁사: 이 시간 넘으면 경고
+  NOTICE_MAX_DAYS: 4,                    // 타사: 고시일이 한국 날짜로 4일보다 오래되면 그 장을 뺌
+  COMP_MAX_AGE_MS: 24 * 60 * 60 * 1000,  // 타사: 받은 지(fetchedAt) 24시간 넘으면 그 장을 뺌
+  SPOT_MAX_AGE_MS: 2 * 60 * 60 * 1000,   // 1돈 환산 줄: 금값 시각이 2시간 넘으면 숨김
+  CHART_NOW_MS: 2 * 60 * 60 * 1000,      // 그래프 마지막 점이 2시간 넘으면 숫자는 /api/spot 값
+  CHART_HOURS: 48,                       // 그래프는 최근 48시간 점만 (서버와 같은 기준 · 저장값에도 적용)
+  SPOT_PTS_MS: 5 * 60 * 1000,            // 그래프 점은 5분에 한 번만 받음 (그 사이엔 &spot=0)
+  FETCH_TIMEOUT_MS: 10 * 1000,           // 요청이 매달리면 10초 뒤 실패로 봄
+  COMP_TIMEOUT_MS: 15 * 1000,            // /api/competitors 만 15초 (서버가 타사마다 8초 + 함수 깨우는 시간)
+  REPAINT_MS: 60 * 1000,                 // 요청과 상관없이 1분마다 다시 그림 (자정·4일·24시간·2시간 규칙)
+  OFFLINE_AFTER_MS: 2 * 60 * 1000,       // 우리 매장 값을 2분 넘게 못 받았으면 빨간 띠
+  OFFLINE_FAILS: 2,                      // …또는 잇달아 2번 못 받았으면 (장부 읽기가 한 번 느린 것으로는 안 띄움)
   RELOAD_MS: 6 * 60 * 60 * 1000,
+  RELOAD_RETRY_MS: 5 * 60 * 1000,        // 새로고침할 때 서버가 안 열리면 5분 뒤 다시
 };
 
-const DUMMY = {
-  updatedAt:new Date().toISOString(),
-  ours:[
-    {label:'골드바 1돈',    buy:770000,  sell:737000},
-    {label:'18K 금시세',    buyText:'제품시세적용', sell:546000},
-    {label:'14K 금시세',    buyText:'제품시세적용', sell:424000},
-    {label:'백금 시세',     buyText:'제품시세적용', sell:200000},
-    {label:'실버바999 1kg', buy:3350000, sell:2850000},
-  ],
-  competitors:[
-    {code:'A',updatedAt:new Date().toISOString(),rows:[
-      {label:'순금 1돈',   buy:862000, sell:726000},
-      {label:'18K 금시세', buyText:'제품시세적용', sell:533700},
-      {label:'14K 금시세', buyText:'제품시세적용', sell:413900},
-      {label:'백금 시세',  buy:340000, sell:275000},
-    ]},
-    {code:'B',updatedAt:new Date().toISOString(),rows:[
-      {label:'순금 1돈',   buy:858000, sell:722000},
-      {label:'18K 금시세', buyText:'제품시세적용', sell:530200},
-      {label:'14K 금시세', buyText:'제품시세적용', sell:411100},
-      {label:'백금 시세',  buy:336000, sell:271000},
-    ]},
-    {code:'C',updatedAt:new Date().toISOString(),rows:[
-      {label:'순금 1돈',   buy:865000, sell:729000},
-      {label:'18K 금시세', buyText:'제품시세적용', sell:536400},
-      {label:'14K 금시세', buyText:'제품시세적용', sell:416200},
-      {label:'백금 시세',  buy:342000, sell:277000},
-    ]},
-  ],
-  spot:(()=>{const o=[];let p=2648;const n=Date.now();
-    for(let i=47;i>=0;i--){p+=(Math.random()-.48)*7;o.push({t:n-i*18e5,v:+p.toFixed(2)});}
-    return o;})(),
+// B사 예비 직접 읽기 주소 (CORS * · 평범한 GET · 머리글 안 붙임) — 서버 api/competitors.js 의 B_URL 과 같음
+const B_DIRECT_URL = 'https://irena111.cafe24.com/api/goldgold/mapper.indexPrice.php';
+// 화면에 내는 타사 (이 순서로 돌림)
+const RIVAL_CODES = ['A', 'B'];
+
+// 주소 ?store= 값 → 장부 매장 id
+const STORE_ALIAS = {
+  return:'return',
+  sagyejeol:'sagyejeol', sagye:'sagyejeol',
+  geumsarang:'geumsarang', geum:'geumsarang',
 };
 
-const won = n => n.toLocaleString('ko-KR');
-const $   = s => document.querySelector(s);
+/* 매장별 배경 — 이 덩이만 바꾸면 매장 모습이 바뀜
+   logoFit/logoY 판단 (16:9 TV · 1920×1080 기준):
+   - 로고 그림은 어두운 벽까지 있는 그림이라 contain 이면 TV 비율과 다른 만큼 그림 가장자리가
+     생길 수 있음 → 셋 다 cover(화면 꽉 채움)로 하고, 글자가 잘리지 않게 세로 위치만 고름.
+   - 리턴 rg-logo.png 1705×922(1.85:1) 은 TV(1.78:1)보다 넓어 cover 면 세로가 다 보임 (예전 값 그대로).
+   - 사계절·금사랑 1536×1024(1.5:1) 은 cover 면 가로가 맞고 세로 84% 만 보임 (16:10 은 94% · 브라우저 줄
+     있는 1920×1000 은 78%). 금색이 있는 줄: 사계절 10.4%~87.9% · 금사랑 23.2%~80.7%.
+     사계절은 logoY 45% 일 때 7.0%~91.4% 가 보임 → 원·글자·밑 별까지 다 보임.
+     (전체 화면이 아니라 브라우저 줄이 남은 1920×1000 이면 9.9%~88.0% → 맨 밑 작은 별 장식만 조금 잘리고 글자는 그대로)
+     금사랑은 여유가 많아 가운데(50%) → 7.8%~92.2%.
+   - 진하기: 사계절 그림은 금색 면적이 넓어 숫자 뒤가 시끄러워지기 쉬움 → 리턴(.85)보다 낮춘 .70.
+     금사랑은 모노그램·글자가 가늘어 .80. (합성 그림으로 숫자 읽힘 확인 · 실제 TV 에서 한 번 더 볼 것)
+   - 표 칸 바탕(panelA·panelBlur): 사계절 「FOUR SEASONS GOLD · 사계절 금거래소」, 금사랑 「금사랑 금거래소」
+     글자가 아래 줄 숫자 뒤에 겹침 → 칸 바탕을 조금 진하게 + 칸 뒤 로고만 살짝 흐리게 (숫자는 또렷 · 로고 모양은 그대로).
+     리턴은 예전 그대로 (.42/.50 · 1.5px). */
+const THEMES = {
+  return:{
+    title:'리턴 금거래소 시세판',
+    logo:'rg-logo.png',
+    gold:'#d9b158', goldHi:'#f4dc9d', goldRgb:'217,177,88',
+    metal:['#6e6a63','#4a4741','#2e2c28','#1a1917','#141312'],
+    logoOpacity:.85, logoFit:'cover', logoY:'60%',
+    logoFilter:'saturate(1.05) brightness(1.18) contrast(1.12)',
+    panelA:[.42,.50], panelBlur:'1.5px',
+  },
+  sagyejeol:{
+    title:'사계절 금거래소 시세판',
+    logo:'logos/sagyejeol.jpg',
+    gold:'#dcb456', goldHi:'#f7e0a0', goldRgb:'220,180,86',
+    metal:['#706858','#4b453b','#2f2b25','#1b1815','#141210'],
+    logoOpacity:.70, logoFit:'cover', logoY:'45%',
+    logoFilter:'saturate(1.0) brightness(1.05) contrast(1.15)',
+    panelA:[.54,.62], panelBlur:'3px',
+  },
+  geumsarang:{
+    title:'금사랑 금거래소 시세판',
+    logo:'logos/geumsarang.jpg',
+    gold:'#d3b47c', goldHi:'#f4e1b6', goldRgb:'211,180,124',
+    metal:['#6b6967','#474544','#2d2b2a','#1a1918','#131212'],
+    logoOpacity:.80, logoFit:'cover', logoY:'50%',
+    logoFilter:'saturate(1.05) brightness(1.12) contrast(1.15)',
+    panelA:[.54,.62], panelBlur:'3px',
+  },
+};
 
-function kstStamp(iso){
-  const d = iso ? new Date(iso) : new Date();
-  const k = new Date(d.toLocaleString('en-US',{timeZone:'Asia/Seoul'}));
-  const p = n => String(n).padStart(2,'0');
-  return `${k.getMonth()+1}/${k.getDate()}  ${p(k.getHours())}:${p(k.getMinutes())}`;
+const hasOwn = (o,k) => Object.prototype.hasOwnProperty.call(o,k);
+
+/* 주소 → 매장 id. ?store 가 아예 없으면 리턴, 빈 값·모르는 값·여러 개면 null(주소 확인 화면)
+   - store 키는 대소문자를 안 가림 (?Store=sagyejeol 을 리턴으로 보면 사계절 TV 에 리턴 시세가 뜸)
+   - store 키가 없는데 주소(뒤 글자·# 뒤)에 다른 매장 이름이 보이면 키를 잘못 친 것 → null
+     (?stroe=sagyejeol · #store=geum 같은 오타가 리턴으로 넘어가지 않게.
+      상관없는 글자 ?utm=… 는 예전처럼 리턴 — 리턴 TV 주소에 뭐가 붙어 있어도 안 깨지게) */
+function pickStore(search, hash){
+  let params;
+  try{ params = new URLSearchParams(search || ''); }catch(e){ return null; }
+  let v = null;
+  for(const [k, val] of params){
+    if(k.trim().toLowerCase() !== 'store') continue;
+    if(v !== null) return null;              // store 가 두 번
+    v = val;
+  }
+  if(v !== null){
+    v = v.trim().toLowerCase();
+    return hasOwn(STORE_ALIAS, v) ? STORE_ALIAS[v] : null;
+  }
+  let rest = String(search || '') + ' ' + String(hash || '');
+  try{ rest = decodeURIComponent(rest); }catch(e){}
+  return /sagye|geum|사계절|금사랑/i.test(rest) ? null : 'return';
 }
-/* 경쟁사: 자동 수집이라 10분만 안 와도 이상 → 경고 */
-const isStale = iso => !iso || Date.now() - new Date(iso).getTime() > CONFIG.STALE_MS;
+
+/* 주소 ?src= → 우리 매장 값 출처 미리 보기 ('ledger'·'board' 만 · 그 밖·없음·여러 개는 null = 서버 기본) */
+const SRC_VALUES = ['ledger', 'board'];
+function pickSrc(search){
+  let params;
+  try{ params = new URLSearchParams(search || ''); }catch(e){ return null; }
+  const all = params.getAll('src');
+  if(all.length !== 1) return null;
+  const v = all[0].trim().toLowerCase();
+  return SRC_VALUES.indexOf(v) >= 0 ? v : null;
+}
+
+function pickTheme(store){
+  return store && hasOwn(THEMES, store) ? THEMES[store] : null;
+}
+
+/* THEMES 한 덩이 → CSS 변수 */
+function themeVars(t){
+  return {
+    '--gold':t.gold, '--gold-hi':t.goldHi, '--gold-rgb':t.goldRgb,
+    '--metal-1':t.metal[0], '--metal-2':t.metal[1], '--metal-3':t.metal[2],
+    '--metal-4':t.metal[3], '--metal-5':t.metal[4],
+    '--logo-url':`url('${t.logo}')`,
+    '--logo-opacity':String(t.logoOpacity),
+    '--logo-fit':t.logoFit, '--logo-y':t.logoY,
+    '--logo-filter':t.logoFilter,
+    '--panel-a1':String(t.panelA[0]), '--panel-a2':String(t.panelA[1]),
+    '--panel-blur':t.panelBlur,
+  };
+}
+
+/* ── 시각 (한국시간) ──
+   한국은 서머타임이 없어 +9시간 고정으로 계산 (TV 브라우저마다 다른 Intl 표기에 기대지 않음) */
+const KST_MS = 9 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const pad2 = n => String(n).padStart(2,'0');
+function toMs(t){
+  if(t == null || t === '') return NaN;
+  return typeof t === 'number' ? t : new Date(t).getTime();
+}
+function kstParts(t){
+  const d = new Date(toMs(t) + KST_MS);
+  return { m:d.getUTCMonth()+1, d:d.getUTCDate(), hh:d.getUTCHours(), mm:d.getUTCMinutes() };
+}
+function kstDay(t){
+  const ms = toMs(t);
+  return Number.isFinite(ms) ? new Date(ms + KST_MS).toISOString().slice(0,10) : '';
+}
+function isTodayKst(t, now = Date.now()){
+  const d = kstDay(t);
+  return d !== '' && d === kstDay(now);
+}
+function ageMs(t, now = Date.now()){
+  const ms = toMs(t);
+  return Number.isFinite(ms) ? now - ms : Infinity;
+}
+function kstStamp(iso){
+  const ms = toMs(iso);
+  if(!Number.isFinite(ms)) return '—';
+  const p = kstParts(ms);
+  return `${p.m}/${p.d}  ${pad2(p.hh)}:${pad2(p.mm)}`;
+}
+function kstHM(t){
+  const p = kstParts(t);
+  return `${pad2(p.hh)}:${pad2(p.mm)}`;
+}
+/* 「14시 05분」 — 오늘이 아니면 앞에 날짜 「10/31 14시 05분」 */
+function fmtSince(t, now = Date.now()){
+  if(!Number.isFinite(toMs(t))) return '';
+  const p = kstParts(t);
+  const hm = `${p.hh}시 ${pad2(p.mm)}분`;
+  return isTodayKst(t, now) ? hm : `${p.m}/${p.d} ${hm}`;
+}
 
 /* 우리 매장: 하루 한 번 넣는 값이라 '오늘 갱신했나'로 판단 (한국시간 기준) */
-function isStaleOurs(iso){
-  if(!iso) return true;
-  const day = d => new Date(d).toLocaleDateString('en-CA',{timeZone:'Asia/Seoul'});
-  return day(iso) !== day(Date.now());
+const isStaleOurs = (iso, now = Date.now()) => !isTodayKst(iso, now);
+
+/* 우리 매장 칸 머리 시각 — 장부에 날짜만 있으면(oursDateOnly) 「10/30」 처럼 날짜만 */
+function oursStampText(o){
+  if(!o || !Number.isFinite(toMs(o.updatedAt))) return '—';
+  if(o.dateOnly){ const p = kstParts(o.updatedAt); return `${p.m}/${p.d}`; }
+  return kstStamp(o.updatedAt);
+}
+
+/* ── 타사 시세 말 되는지 (서버 api/competitors.js 와 같은 규칙 · 시험이 둘을 맞대 봄) ──
+   순금 살때·팔때 30만~150만 · 살때 ≥ 팔때 → 깨지면 그 회사 통째로 버림 (null)
+   18K 팔때 < 순금 팔때 (절반보다 큼) · 14K 팔때 < 18K 팔때 (순금 40%보다 큼) · 백금 5만~100만 · 살때 ≥ 팔때
+   숫자 자리에 숫자가 아니면 버림 → 순금 말고 다른 줄이 깨지면 그 줄만 「-」 */
+const RIVAL_TEXT = '제품시세적용';
+function wonNum(v){
+  if(typeof v === 'number') return Number.isSafeInteger(v) && v > 0 ? v : null;
+  if(typeof v !== 'string') return null;
+  const s = v.replace(/\s+/g, '').replace(/원$/, '');
+  if(!/^(\d{1,3}(,\d{3})+|\d+)$/.test(s)) return null;
+  const n = Number(s.replace(/,/g, ''));
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+function vetRival(raw){
+  const r = raw && typeof raw === 'object' ? raw : {};
+  const part = k => (r[k] && typeof r[k] === 'object' ? r[k] : {});
+  const isText = v => typeof v === 'string' && v.replace(/\s+/g, '') === RIVAL_TEXT;
+  const inR = (n, lo, hi) => n != null && n >= lo && n <= hi;
+  const dash = label => ({ label, buy: null, buyText: '-', sell: null, sellText: '-' });
+  const g = part('gold'), gb = wonNum(g.buy), gs = wonNum(g.sell);
+  if(!inR(gb, 300000, 1500000) || !inR(gs, 300000, 1500000) || gb < gs) return null;
+  const rows = [{ label: '순금 1돈', buy: gb, buyText: null, sell: gs, sellText: null }];
+  const kRow = (label, p, sell) => {
+    if(isText(p.buy)) return { label, buy: null, buyText: RIVAL_TEXT, sell, sellText: null };
+    const b = wonNum(p.buy);
+    return b != null && b > sell && b < gb ? { label, buy: b, buyText: null, sell, sellText: null } : dash(label);
+  };
+  const k18 = part('k18'), s18 = wonNum(k18.sell);
+  const ok18 = s18 != null && s18 < gs && s18 > gs * 0.5;
+  rows.push(ok18 ? kRow('18K 금시세', k18, s18) : dash('18K 금시세'));
+  const k14 = part('k14'), s14 = wonNum(k14.sell);
+  const ok14 = s14 != null && s14 < (ok18 ? s18 : gs) && s14 > gs * 0.4;
+  rows.push(ok14 ? kRow('14K 금시세', k14, s14) : dash('14K 금시세'));
+  const pt = part('pt'), ps = wonNum(pt.sell);
+  let ptRow = dash('백금 시세');
+  if(inR(ps, 50000, 1000000)){
+    if(isText(pt.buy)) ptRow = { label: '백금 시세', buy: null, buyText: RIVAL_TEXT, sell: ps, sellText: null };
+    else{
+      const pb = wonNum(pt.buy);
+      if(inR(pb, 50000, 1000000) && pb >= ps) ptRow = { label: '백금 시세', buy: pb, buyText: null, sell: ps, sellText: null };
+    }
+  }
+  rows.push(ptRow);
+  return rows;
+}
+/* 고시일 'YYYY-MM-DD' — 있는 날짜이고 한국 날짜로 오늘 이전일 때만 (아니면 null) */
+function validNoticeDate(v, now = Date.now()){
+  if(typeof v !== 'string') return null;
+  const s = v.trim();
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if(!m) return null;
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  if(d.getUTCFullYear() !== +m[1] || d.getUTCMonth() !== +m[2] - 1 || d.getUTCDate() !== +m[3]) return null;
+  const today = new Date(now + KST_MS).toISOString().slice(0, 10);
+  return s <= today ? s : null;
+}
+/* B사 JSON → 검사 전 값 (18K·14K 살때는 안 내므로 「제품시세적용」) */
+function standardRaw(j){
+  if(!j || typeof j !== 'object') return null;
+  return {
+    gold: { buy: j.t_gold_b_24, sell: j.t_gold_s_24 },
+    k18:  { buy: RIVAL_TEXT, sell: j.t_gold_s_18 },
+    k14:  { buy: RIVAL_TEXT, sell: j.t_gold_s_14 },
+    pt:   { buy: j.t_pla_price_b, sell: j.t_pla_price_s },
+  };
+}
+/* ── 검사 끝 ── */
+
+/* B사 예비 직접 읽기 결과 → 서버와 같은 꼴의 회사 한 덩이 (말이 안 되면 null) */
+function rivalFromStandard(j, now = Date.now()){
+  const rows = vetRival(standardRaw(j));
+  if(!rows) return null;
+  const nd = validNoticeDate(j.t_gold_date, now);
+  return { code:'B', noticeDate: nd, dataDate: nd, fetchedAt: new Date(now).toISOString(), rows };
+}
+
+/* 회사 한 덩이가 꼴이 맞고, 받은 지(fetchedAt) maxAge 안인가 (A·B 만 · 순금 줄이 말이 됨) */
+function rivalFresh(c, now, maxAge){
+  if(!c || typeof c !== 'object' || RIVAL_CODES.indexOf(c.code) < 0) return false;
+  if(!Array.isArray(c.rows) || !c.rows.length || !c.rows[0]) return false;
+  if(!vetRival({ gold:{ buy:c.rows[0].buy, sell:c.rows[0].sell } })) return false;
+  return ageMs(c.fetchedAt, now) <= maxAge;
+}
+const YMD_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+/* 타사 한 장을 손님 앞에 내도 되나
+   - rivalFresh(24시간) · 값 날짜(dataDate, 없으면 noticeDate)가 있으면 한국 날짜로 4일 안
+   (고시는 하루 한 번이라 몇 시간 묵은 것은 정상 — 빨갛게 깜빡이지 않음) */
+function rivalShowable(c, now = Date.now()){
+  if(!rivalFresh(c, now, CONFIG.COMP_MAX_AGE_MS)) return false;
+  const nd = [c.dataDate, c.noticeDate].filter(d => typeof d === 'string' && YMD_RE.test(d))[0] || null;
+  if(nd){
+    const days = (Date.parse(kstDay(now) + 'T00:00:00Z') - Date.parse(nd + 'T00:00:00Z')) / DAY_MS;
+    if(!(days <= CONFIG.NOTICE_MAX_DAYS)) return false;
+  }
+  return true;
+}
+/* 타사 장 머리 — 고시일 있으면 「10/31 고시」, 없으면 받은 시각 「14:05 기준」 (오늘이 아니면 「11/1 14:05 기준」) */
+function rivalStamp(c, now = Date.now()){
+  const nd = c && typeof c.noticeDate === 'string' ? YMD_RE.exec(c.noticeDate) : null;
+  if(nd) return `${+nd[2]}/${+nd[3]} 고시`;
+  if(!c || !Number.isFinite(toMs(c.fetchedAt))) return '';
+  const p = kstParts(c.fetchedAt);
+  return `${isTodayKst(c.fetchedAt, now) ? '' : p.m + '/' + p.d + ' '}${kstHM(c.fetchedAt)} 기준`;
+}
+/* 돌릴 장 고르기 — A 다음 B. B 가 서버에서 없거나 못 쓰면 예비 직접 읽기 값 */
+function pickRivals(serverList, directB, now = Date.now()){
+  const list = (Array.isArray(serverList) ? serverList : []).filter(c => rivalShowable(c, now));
+  return RIVAL_CODES.map(code =>
+    list.find(c => c.code === code) ||
+    (code === 'B' && rivalShowable(directB, now) && directB.code === 'B' ? directB : null)
+  ).filter(Boolean);
+}
+/* 직접 읽기가 필요한가 — 서버가 준 B 가 없거나, 받은 지 3시간이 넘었을 때만
+   (서버가 B 를 멀쩡히 주는데 고시일만 오래된 때 — 설·추석 — 는 직접 읽어도 같은 값이라 안 읽음) */
+function needDirectB(serverList, now = Date.now()){
+  return !(Array.isArray(serverList) && serverList.some(c => c && c.code === 'B' && rivalFresh(c, now, CONFIG.B_SERVER_FRESH_MS)));
+}
+
+/* 서버 시각 − TV 시계 (ms). 서버 시각이 없거나 이상하면 null (그때는 예전 차이 그대로) */
+function clockSkew(serverNow, clientNow){
+  const s = toMs(serverNow);
+  if(!Number.isFinite(s) || s < Date.UTC(2026,0,1)) return null;
+  return s - clientNow;
+}
+
+/* 그래프 점 — 최근 48시간만 (저장해 둔 며칠 전 점이 오늘 그래프처럼 그려지지 않게) */
+function recentPoints(points, now = Date.now()){
+  const max = CONFIG.CHART_HOURS * 60 * 60 * 1000;
+  return (Array.isArray(points) ? points : [])
+    .filter(p => p && Number.isFinite(p.v) && ageMs(p.t, now) <= max);
+}
+
+/* 국제 시세 1돈 환산 — 서버(api/spot.js)와 같은 식
+   1돈 원 = USD/oz × KRW ÷ 31.1035 × 3.75 → 100원 단위 반올림 */
+const OZ_G = 31.1035, DON_G = 3.75;
+function wonPerDon(usd, krw){
+  usd = Number(usd); krw = Number(krw);
+  if(!(usd > 0) || !(krw > 0)) return null;
+  return Math.round(usd * krw / OZ_G * DON_G / 100) * 100;
+}
+/* /api/spot 응답 → 쓸 값 (못 쓰면 null) — 「1돈 환산」 줄 · 그래프가 묵었을 때 오른쪽 위 숫자
+   금값 시각(goldAt)으로만 2시간 판단 — 환율 출처는 하루 한 번 바뀌어 늘 몇 시간씩 묵어 있음 */
+function spotCard(s, now = Date.now()){
+  if(!s || s.ok !== true) return null;
+  const usd = Number(s.usdPerOz), krw = Number(s.krwPerUsd);
+  if(!(usd >= 1000 && usd <= 10000) || !(krw >= 900 && krw <= 2000)) return null;
+  if(ageMs(s.goldAt, now) > CONFIG.SPOT_MAX_AGE_MS) return null;
+  const sv = Number(s.wonPerDon);
+  return { usd, krw, don: sv > 0 ? sv : wonPerDon(usd, krw), at: s.goldAt };
+}
+
+/* 그래프 오른쪽 위 숫자: 그래프 마지막 점이 2시간 넘게 묵었으면 /api/spot 값 (둘 다 없으면 null) */
+function chartNow(points, s, now = Date.now()){
+  const last = Array.isArray(points) && points.length ? points[points.length-1] : null;
+  if(last && Number.isFinite(last.v) && ageMs(last.t, now) <= CONFIG.CHART_NOW_MS){
+    return { v:last.v, from:'chart' };
+  }
+  const card = spotCard(s, now);
+  return card ? { v:card.usd, from:'spot' } : null;
+}
+
+/* 「1돈 환산 623,800원 · 참고」 줄 글 — 못 쓰면 같은 꼴에 숫자만 「—」
+   (안 보이게 숨겨도 높이가 그대로라 그래프가 위아래로 안 움직임 · 옛 숫자도 안 남음)
+   환율이 마지막 예비(er-api)에서 왔으면 끝에 그쪽 무료 조건의 출처 표기를 작게 붙임 */
+function convHtml(sc, s){
+  const ok = !!(sc && sc.don > 0);
+  const num = ok ? Number(sc.don).toLocaleString('ko-KR') : '—';
+  const src = ok && s && typeof s.source === 'string' && s.source.indexOf('er-api') >= 0
+    ? '<span class="src">Rates By Exchange Rate API</span>' : '';
+  return `<span>1돈 환산</span><b>${num}</b><span class="u">원</span><span class="ref">· 참고</span>${src}`;
+}
+
+/* 우리 매장 칸에 무엇을 그릴지
+   o = { updatedAt, rows, at(받은 시각), dateOnly } — 방금 받은 값이든 저장해 둔 값이든 같은 규칙 */
+function oursView(o, now = Date.now()){
+  if(!o || !Array.isArray(o.rows)) return { kind:'msg', text:'시세 불러오는 중…' };
+  if(!isTodayKst(o.at, now))       return { kind:'msg', text:'시세 확인 중' };   // 오늘 받은 값이 아니면 가격 안 그림
+  if(!o.rows.length)               return { kind:'msg', text:'시세를 아직 넣지 않았습니다' };
+  return { kind:'rows', rows:o.rows };
+}
+
+/* 상단 빨간 띠 글 */
+function offlineText(o, now = Date.now()){
+  return o && Number.isFinite(toMs(o.at))
+    ? `연결 끊김 ${fmtSince(o.at, now)}부터 — 표시된 가격은 최신이 아닙니다`
+    : '시세 서버 연결 끊김 — 다시 연결하는 중입니다';
+}
+
+/* /api/prices 응답을 상태에 합침. 덩이마다 따로 — 못 받은 덩이는 예전 값 그대로 둠
+   v=2: oursOk:true 일 때만 우리 매장 값 (oursEmpty 면 rows:[] → 「아직 안 넣음」) · oursOk:false → 그대로 + 띠
+   (버전 없는 옛 서버 꼴도 받음: ours 가 배열이면 받은 것) */
+function mergePrices(st, d, now = Date.now()){
+  const at = new Date(now).toISOString();
+  const next = Object.assign({}, st);
+  let oursOk = false;
+  const v2 = !!d && d.v === 2;
+  if(d && Array.isArray(d.ours) && (!v2 || d.oursOk === true)){
+    next.ours = { updatedAt: d.updatedAt == null ? null : d.updatedAt, rows: d.ours, at, dateOnly: v2 && d.oursDateOnly === true };
+    oursOk = true;
+  }
+  if(d && Array.isArray(d.spot)){
+    next.spot = { points: d.spot.filter(p => p && p.t && Number.isFinite(p.v)), at };
+  }
+  return { st: next, oursOk };
+}
+
+/* /api/competitors 응답을 상태에 합침 — 회사마다 따로
+   응답에 있는(꼴이 맞는) 회사는 새 값 · 없는 회사(failed · 꼴 틀림)는 앞서 받은 값을 그대로 둠
+   (서버가 한 번 실패해도 멀쩡한 앞 값이 바로 사라지지 않게 · 오래된 것은 24시간·4일 규칙이 뺌)
+   응답 자체를 못 받으면 상태 그대로 */
+function mergeRivals(st, d, now = Date.now()){
+  if(!d || !Array.isArray(d.companies)) return st;
+  const prev = st && st.rivals && Array.isArray(st.rivals.list) ? st.rivals.list : [];
+  const okc = c => c && typeof c === 'object' && RIVAL_CODES.indexOf(c.code) >= 0 && Array.isArray(c.rows);
+  const list = RIVAL_CODES.map(code =>
+    d.companies.filter(okc).filter(c => c.code === code)[0] ||
+    prev.filter(okc).filter(c => c.code === code)[0] || null
+  ).filter(Boolean);
+  return Object.assign({}, st, { rivals: { list, at: new Date(now).toISOString() } });
+}
+
+/* 저장해 둔 값(localStorage 글) → 상태. 꼴이 이상한 덩이는 버림
+   (예전 확장 프로그램 값 comps 는 더 안 씀 — 옛 B·C 와 새 A·B 는 뜻이 달라 읽지 않음) */
+function parseCache(text){
+  let d;
+  try{ d = JSON.parse(text); }catch(e){ return {}; }
+  if(!d || typeof d !== 'object') return {};
+  const out = {};
+  if(d.ours && Array.isArray(d.ours.rows) && d.ours.at) out.ours = { updatedAt: d.ours.updatedAt == null ? null : d.ours.updatedAt, rows: d.ours.rows, at: d.ours.at, dateOnly: d.ours.dateOnly === true };
+  if(d.rivals && Array.isArray(d.rivals.list)) out.rivals = { list: d.rivals.list, at: d.rivals.at };
+  if(d.spot && Array.isArray(d.spot.points)) out.spot = { points: d.spot.points, at: d.spot.at };
+  if(d.spotNow && typeof d.spotNow === 'object') out.spotNow = d.spotNow;
+  if(Number.isFinite(d.skew)) out.skew = d.skew;
+  return out;
+}
+/* B사 예비 직접 읽기 저장값 → { tried(마지막으로 읽으러 간 TV 시각), company } */
+function parseBDirect(text){
+  let d;
+  try{ d = JSON.parse(text); }catch(e){ return { tried:0, company:null }; }
+  if(!d || typeof d !== 'object') return { tried:0, company:null };
+  return {
+    tried: Number.isFinite(d.tried) ? d.tried : 0,
+    company: d.company && typeof d.company === 'object' && d.company.code === 'B' && Array.isArray(d.company.rows) ? d.company : null,
+  };
+}
+
+/* ==== 순수 함수 끝 ==== */
+
+const won = n => Number(n).toLocaleString('ko-KR');
+const $   = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* 화면 한 조각이 오류 나도 나머지는 계속 그리게 */
+function safe(name, fn){
+  try{ return fn(); }catch(e){ console.warn('[board]', name, e); }
+}
+
+const STORE = pickStore(location.search, location.hash);
+const THEME = pickTheme(STORE);
+const SRC = pickSrc(location.search);      // 미리 보기 (보통 null)
+const CACHE_KEY = 'rb-board:v1:' + STORE + (SRC ? ':' + SRC : '');   // 매장별 저장 칸 (미리 보기는 따로)
+const BDIRECT_KEY = 'rb-board:v1:rivalB';   // B사 예비 직접 읽기 (마지막으로 읽으러 간 시각 · 값)
+
+let S = {};             // { ours, rivals, spot, spotNow, skew }
+let bDirect = { tried:0, company:null };
+let oursFails = 0;      // /api/prices 에서 우리 매장 값을 잇달아 못 받은 횟수 → 2번이면 빨간 띠
+let lastOursOk = 0;     // 이 화면이 우리 매장 값을 마지막으로 받은 시각 (서버 시각 기준 · 저장 안 함)
+let ptsAt = 0;          // 이 화면이 그래프 점을 마지막으로 받은 시각 (TV 시계 · 저장 안 함)
+let loading = false;    // /api/prices 요청이 아직 안 끝났나
+let rivalsLoading = false;
+
+/* 서버 시각으로 맞춘 「지금」 — TV 시계가 몇 시간 틀려도 타사 장·환산 줄 신선도 판단이 흔들리지 않게.
+   /api/prices 응답의 now 로 차이를 재고, 끊긴 채 켜지면 지난번 차이(저장값)를 씀 */
+let skew = 0;
+const clockNow = () => Date.now() + skew;
+
+function loadCache(){
+  try{ return parseCache(localStorage.getItem(CACHE_KEY)); }catch(e){ return {}; }
+}
+function saveCache(){
+  try{ localStorage.setItem(CACHE_KEY, JSON.stringify(S)); }catch(e){}
+}
+function loadBDirect(){
+  try{ return parseBDirect(localStorage.getItem(BDIRECT_KEY)); }catch(e){ return { tried:0, company:null }; }
+}
+function saveBDirect(){
+  try{ localStorage.setItem(BDIRECT_KEY, JSON.stringify(bDirect)); }catch(e){}
+}
+
+function applyTheme(t){
+  document.title = t.title;
+  const v = themeVars(t), root = document.documentElement.style;
+  for(const k in v) root.setProperty(k, v[k]);
+}
+
+function showBadAddress(){
+  document.title = '시세판 — 주소를 확인해 주세요';
+  $('#board').style.display = 'none';
+  $('#badStore').classList.add('show');
 }
 
 function cell(cls,val,text){
-  if(val==null) return `<div class="c ${cls} text">${text||'-'}</div>`;
-  return `<div class="c ${cls}" data-v="${val}">${won(val)}<span class="won">원</span></div>`;
+  if(val==null) return `<div class="c ${cls} text">${esc(text||'-')}</div>`;
+  return `<div class="c ${cls}" data-v="${Number(val)}">${won(val)}<span class="won">원</span></div>`;
 }
 
 const prevVals = new Map();
 
-function renderOurs(data){
+function renderOurs(now){
   const tbl = $('#oursTbl');
   [...tbl.querySelectorAll('.row:not(.row--head)')].forEach(el=>el.remove());
+  const st = $('#oursStamp');
+  const v = oursView(S.ours, now);
 
-  data.ours.forEach((r,i)=>{
+  if(v.kind==='msg'){
+    tbl.style.gridTemplateRows = 'auto 1fr';
+    const div=document.createElement('div');
+    div.className='row row--msg';
+    div.textContent=v.text;
+    tbl.appendChild(div);
+    st.textContent='';          // 안내 글만 있을 때는 머리 시각을 비움 (「—」 하나가 남지 않게)
+    st.classList.remove('stale');
+    return;
+  }
+
+  // 5줄이면 예전 그대로(.tbl--5), 줄 수가 다르면 그만큼 나눔
+  tbl.style.gridTemplateRows = v.rows.length===5 ? '' : `auto repeat(${v.rows.length},1fr)`;
+
+  v.rows.forEach((r,i)=>{
     const div=document.createElement('div');
     div.className='row';
-    div.innerHTML=`<div class="c c-item">${r.label}</div>`+
-      cell('c-buy', r.buy ?? null, r.buyText)+
-      cell('c-sell',r.sell ?? null, r.sellText);
+    div.innerHTML=`<div class="c c-item">${esc(r.label)}</div>`+
+      cell('c-buy', r.buy == null ? null : r.buy, r.buyText)+
+      cell('c-sell',r.sell == null ? null : r.sell, r.sellText);
     tbl.appendChild(div);
 
     ['c-buy','c-sell'].forEach(k=>{
@@ -361,57 +894,94 @@ function renderOurs(data){
     });
   });
 
-  const st=$('#oursStamp');
-  st.textContent=kstStamp(data.updatedAt);
-  st.classList.toggle('stale',isStaleOurs(data.updatedAt));
+  st.textContent = oursStampText(S.ours);
+  st.classList.toggle('stale', isStaleOurs(S.ours.updatedAt, now));
 }
 
-let rotIdx=0, rotTimer=null;
+/* 타사 한 장 (A사·B사) — 머리에 「10/31 고시」 · 빨간 깜빡임 없음 */
+function compHtml(c, now){
+  return `
+    <div class="phead">
+      <div class="ptitle">${esc(c.code)}사 시세</div>
+      <div class="pstamp pstamp--notice">${esc(rivalStamp(c, now))}</div>
+    </div>
+    <div class="tbl tbl--4">
+      <div class="row row--head">
+        <div class="c c-item">종목<span class="sub">1돈 3.75g 기준</span></div>
+        <div class="c c-buy">내가 살때</div>
+        <div class="c c-sell">내가 팔때</div>
+      </div>
+      ${c.rows.map(r=>`
+        <div class="row">
+          <div class="c c-item">${esc(r && r.label)}</div>
+          ${cell('c-buy', r && r.buy != null ? r.buy : null, r && r.buyText)}
+          ${cell('c-sell',r && r.sell != null ? r.sell : null, r && r.sellText)}
+        </div>`).join('')}
+    </div>`;
+}
 
-function renderComps(all){
-  // 오래 갱신 안 된 회사는 로테이션에서 자동 제외
-  // (사이트 구조가 바뀌어 수집이 멈춰도 화면은 멀쩡하게 유지)
-  let list = (all||[]).filter(c => !isStale(c.updatedAt));
-  // 전부 오래됐으면 그냥 다 보여줌 (빈 화면보다는 낫다)
-  if(!list.length) list = all || [];
+/* 보여 줄 타사 시세가 하나도 없을 때 (오래된 값을 대신 내지 않음) */
+function noneHtml(){
+  return `
+    <div class="phead">
+      <div class="ptitle">타사 시세</div>
+    </div>
+    <div class="tbl tbl--one"><div class="row row--msg">확인 중</div></div>`;
+}
+
+let rotIdx=0, rotTimer=null, rotKeys=[], rotHtml=[];
+
+function rotate(){
+  safe('rotate', ()=>{
+    const p=document.querySelectorAll('.comp'), d=document.querySelectorAll('.dot');
+    if(p.length<2) return;
+    if(p[rotIdx]) p[rotIdx].classList.remove('on');
+    if(d[rotIdx]) d[rotIdx].classList.remove('on');
+    rotIdx=(rotIdx+1)%p.length;
+    if(p[rotIdx]) p[rotIdx].classList.add('on');
+    if(d[rotIdx]) d[rotIdx].classList.add('on');
+  });
+}
+
+function renderComps(now = clockNow()){
+  const cards = pickRivals(S.rivals && S.rivals.list, bDirect.company, now)
+    .map(c => ({ key:'r-'+c.code, html:compHtml(c, now) }));
+  if(!cards.length) cards.push({ key:'none', html:noneHtml() });
 
   const wrap=$('#compWrap');
-  [...wrap.querySelectorAll('.comp')].forEach(el=>el.remove());
+  const els=[...wrap.querySelectorAll('.comp')];
 
-  list.forEach((c,i)=>{
+  // 같은 장들(같은 순서)이면 장을 새로 만들지 않고 바뀐 장의 속만 고침
+  // (다시 그리기가 장 넘김 1.1초 페이드와 겹쳐도 장이 튀지 않게 · 넘김 시계·보던 장도 그대로)
+  if(els.length===cards.length && cards.map(c=>c.key).join('|')===rotKeys.join('|')){
+    cards.forEach((c,i)=>{
+      if(rotHtml[i]!==c.html){ els[i].innerHTML=c.html; rotHtml[i]=c.html; }
+    });
+    return;
+  }
+
+  // 장이 바뀌면 다시 만들되 보던 장에서 이어서 돌게
+  const keep = rotKeys[rotIdx];
+  let start = cards.findIndex(c => c.key===keep);
+  if(start<0) start=0;
+
+  els.forEach(el=>el.remove());
+  cards.forEach((c,i)=>{
     const sec=document.createElement('div');
-    sec.className='comp'+(i===0?' on':'');
-    sec.innerHTML=`
-      <div class="phead">
-        <div class="ptitle">${c.code}사 시세</div>
-        <div class="pstamp ${isStale(c.updatedAt)?'stale':''}">${kstStamp(c.updatedAt)}</div>
-      </div>
-      <div class="tbl tbl--4">
-        <div class="row row--head">
-          <div class="c c-item">종목<span class="sub">1돈 3.75g 기준</span></div>
-          <div class="c c-buy">내가 살때</div>
-          <div class="c c-sell">내가 팔때</div>
-        </div>
-        ${c.rows.map(r=>`
-          <div class="row">
-            <div class="c c-item">${r.label}</div>
-            ${cell('c-buy', r.buy ?? null, r.buyText)}
-            ${cell('c-sell',r.sell ?? null, r.sellText)}
-          </div>`).join('')}
-      </div>`;
+    sec.className='comp'+(i===start?' on':'');
+    sec.innerHTML=c.html;
     wrap.insertBefore(sec,$('#dots'));
   });
 
-  $('#dots').innerHTML=list.map((_,i)=>`<span class="dot${i===0?' on':''}"></span>`).join('');
+  $('#dots').innerHTML=cards.length>1 ? cards.map((_,i)=>`<span class="dot${i===start?' on':''}"></span>`).join('') : '';
 
-  rotIdx=0; clearInterval(rotTimer);
-  if(list.length>1){
-    rotTimer=setInterval(()=>{
-      const p=document.querySelectorAll('.comp'), d=document.querySelectorAll('.dot');
-      p[rotIdx]?.classList.remove('on'); d[rotIdx]?.classList.remove('on');
-      rotIdx=(rotIdx+1)%p.length;
-      p[rotIdx]?.classList.add('on'); d[rotIdx]?.classList.add('on');
-    },CONFIG.ROTATE_MS);
+  rotKeys = cards.map(c => c.key);
+  rotHtml = cards.map(c => c.html);
+  rotIdx = start;
+  if(cards.length>1){
+    if(!rotTimer) rotTimer=setInterval(rotate,CONFIG.ROTATE_MS);
+  }else{
+    clearInterval(rotTimer); rotTimer=null;
   }
 }
 
@@ -419,26 +989,23 @@ function renderChart(points){
   const svg=$('#chart');
   const box=$('#chartBox').getBoundingClientRect();
   const W=box.width,H=box.height;
-  if(!W||!H||!points?.length) return;
+  if(!W||!H) return;
 
   svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
 
-  // 점이 1개뿐이면 선을 그릴 수 없음 - 안내만 표시
-  if(points.length < 2){
+  // 점이 2개보다 적으면 선을 그릴 수 없음 - 안내만 표시
+  if(!Array.isArray(points) || points.length < 2){
     svg.innerHTML =
       `<text x="${(W/2).toFixed(0)}" y="${(H/2).toFixed(0)}" fill="#7d766a"
          font-size="${(H*.13).toFixed(0)}" font-family="Pretendard,sans-serif"
          text-anchor="middle">데이터 수집 중…</text>`;
-    if(points.length === 1){
-      $('#spotPrice').textContent =
-        points[0].v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-      $('#spotDelta').textContent = '—';
-      $('#spotDelta').className = 'cdelta';
-    }
     return;
   }
 
-  const padT=H*.10,padB=H*.16,padL=W*.015,padR=W*.085;
+  // 축 글자는 칸 제목(「국제 금시세」)보다 크지 않게 — 손님 눈이 축 숫자로 먼저 가지 않게 (예전 H*.075 ≈ 30px)
+  const fs=H*.056;
+  // 오른쪽 여백: 세로축 숫자(4자리)가 칸 밖으로 잘리지 않게 (예전 .085 는 「3883」 끝자리가 잘렸음)
+  const padT=H*.10,padB=H*.16,padL=W*.015,padR=Math.max(W*.07, fs*2.6+12);
   const vals=points.map(p=>p.v);
   const lo=Math.min(...vals),hi=Math.max(...vals),span=(hi-lo)||1;
   const loP=lo-span*.18,hiP=hi+span*.18;
@@ -455,14 +1022,12 @@ function renderChart(points){
   for(let g=0;g<=2;g++){
     const v=loP+(hiP-loP)*(g/2), y=Y(v);
     grid+=`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${(W-padR).toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,.13)" stroke-width="1"/>`;
-    grid+=`<text x="${(W-padR+8).toFixed(1)}" y="${(y+4).toFixed(1)}" fill="#7d766a" font-size="${(H*.075).toFixed(1)}" font-family="Pretendard,sans-serif">${v.toFixed(0)}</text>`;
+    grid+=`<text x="${(W-padR+8).toFixed(1)}" y="${(y+fs*.35).toFixed(1)}" fill="#7d766a" font-size="${fs.toFixed(1)}" font-family="Pretendard,sans-serif">${v.toFixed(0)}</text>`;
   }
 
-  const fmt=t=>{const k=new Date(new Date(t).toLocaleString('en-US',{timeZone:'Asia/Seoul'}));
-    return `${String(k.getHours()).padStart(2,'0')}:${String(k.getMinutes()).padStart(2,'0')}`;};
   let tl='';
   [0,Math.floor(points.length/2),points.length-1].forEach(i=>{
-    tl+=`<text x="${X(i).toFixed(1)}" y="${(H-padB+H*.11).toFixed(1)}" fill="#7d766a" font-size="${(H*.075).toFixed(1)}" font-family="Pretendard,sans-serif" text-anchor="${i===0?'start':i===points.length-1?'end':'middle'}">${fmt(points[i].t)}</text>`;
+    tl+=`<text x="${X(i).toFixed(1)}" y="${(H-padB+H*.10).toFixed(1)}" fill="#7d766a" font-size="${fs.toFixed(1)}" font-family="Pretendard,sans-serif" text-anchor="${i===0?'start':i===points.length-1?'end':'middle'}">${kstHM(points[i].t)}</text>`;
   });
 
   const lx=X(points.length-1), ly=Y(vals[vals.length-1]);
@@ -478,43 +1043,178 @@ function renderChart(points){
     <circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="${Math.max(6,H*.045)}" fill="${stroke}" opacity=".22"/>
     <circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="${Math.max(3,H*.022)}" fill="${stroke}"/>
     ${tl}`;
-
-  const cur=vals[vals.length-1],first=vals[0];
-  const diff=cur-first,pct=(diff/first)*100;
-  $('#spotPrice').textContent=cur.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-  const d=$('#spotDelta');
-  d.textContent=`${diff>=0?'▲':'▼'} ${Math.abs(diff).toFixed(2)} (${Math.abs(pct).toFixed(2)}%)`;
-  d.className='cdelta '+(diff>=0?'up':'down');
 }
 
-let lastGood=DUMMY;
+/* 그래프 오른쪽 위 숫자·등락 (그래프가 묵었으면 /api/spot 값 · 그때 등락은 —)
+   + 제목 밑 「1돈 환산 623,800원 · 참고」 (/api/spot · 금값 시각 2시간 넘으면 숨김) */
+function renderSpotNow(now = clockNow()){
+  const pts = recentPoints(S.spot && S.spot.points, now);
+  const n = chartNow(pts, S.spotNow, now);
+  const d = $('#spotDelta');
+  $('#spotPrice').textContent = n
+    ? n.v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})
+    : '—';
+  if(n && n.from==='chart' && pts.length>=2){
+    const first=pts[0].v, diff=n.v-first, pct=(diff/first)*100;
+    d.textContent=`${diff>=0?'▲':'▼'} ${Math.abs(diff).toFixed(2)} (${Math.abs(pct).toFixed(2)}%)`;
+    d.className='cdelta '+(diff>=0?'up':'down');
+  }else{
+    d.textContent='—';
+    d.className='cdelta';
+  }
+  const sc = spotCard(S.spotNow, now), conv = $('#spotConv');
+  conv.innerHTML = convHtml(sc, S.spotNow);
+  conv.classList.toggle('off', !(sc && sc.don > 0));
+}
+
+function renderOffline(now){
+  const el=$('#offline');
+  // 잇달아 2번 못 받았거나, 어떤 까닭으로든 2분 넘게 우리 매장 값을 못 받았으면 (한 번 느린 것으로는 안 띄움)
+  const late = lastOursOk && now - lastOursOk > CONFIG.OFFLINE_AFTER_MS;
+  if(oursFails >= CONFIG.OFFLINE_FAILS || late){
+    el.textContent=offlineText(S.ours, now);
+    el.classList.add('show');
+  }else{
+    el.classList.remove('show');
+  }
+}
+
+function paint(){
+  const now = clockNow();
+  safe('ours',    ()=>renderOurs(now));
+  safe('comps',   ()=>renderComps(now));
+  safe('spotNow', ()=>renderSpotNow(now));   // 그래프 머리를 먼저 (그래프가 바뀐 칸 높이로 그려지게)
+  safe('chart',   ()=>renderChart(recentPoints(S.spot && S.spot.points, now)));
+  safe('offline', ()=>renderOffline(now));
+}
+
+/* 시간 제한 있는 fetch — 응답이 매달려도(죽은 연결·느린 서버) 10초(ms) 뒤엔 실패로 끝남 (본문 읽기까지) */
+function fetchT(url, opts, read, ms){
+  const ctl = typeof AbortController==='function' ? new AbortController() : null;
+  let timer;
+  const limit = new Promise((_,rej)=>{
+    timer = setTimeout(()=>{ try{ ctl && ctl.abort(); }catch(e){} rej(new Error('timeout')); }, ms || CONFIG.FETCH_TIMEOUT_MS);
+  });
+  const work = fetch(url, ctl ? Object.assign({}, opts, {signal:ctl.signal}) : opts).then(res=>{
+    if(!res.ok) throw new Error(res.status);
+    return read ? read(res) : res;
+  });
+  return Promise.race([work, limit]).finally(()=>clearTimeout(timer));
+}
 
 async function load(){
+  // 앞 요청이 아직이면 건너뜀 (요청이 쌓이거나, 늦게 온 옛 응답이 새 값을 덮지 않게)
+  if(loading) return;
+  loading=true;
+  let d=null;
   try{
-    const res=await fetch(`${CONFIG.API_BASE}/api/prices`,{cache:'no-store'});
-    if(!res.ok) throw new Error(res.status);
-    lastGood=await res.json();
-    $('#offline').classList.remove('show');
+    // 그래프 점은 5분에 한 번만 (그 사이엔 &spot=0 → 서버가 점을 안 읽음)
+    const wantPts = Date.now()-ptsAt >= CONFIG.SPOT_PTS_MS;
+    d=await fetchT(`${CONFIG.API_BASE}/api/prices?store=${encodeURIComponent(STORE)}&v=2${SRC?'&src='+SRC:''}${wantPts?'':'&spot=0'}`,
+      {cache:'no-store'}, r=>r.json());
   }catch(e){
-    console.warn('[board] fetch 실패, 폴백 사용:',e.message);
-    $('#offline').classList.toggle('show',lastGood!==DUMMY);
+    console.warn('[board] /api/prices 실패, 마지막으로 받은 값 사용:',e && e.message);
+  }finally{
+    loading=false;
   }
-  paint(lastGood);
+  safe('merge', ()=>{
+    if(d){
+      const k=clockSkew(d.now, Date.now());
+      if(k!=null) skew=k;
+      const r=mergePrices(S,d,clockNow());
+      S=r.st;
+      S.skew=skew;
+      oursFails = r.oursOk ? 0 : oursFails+1;
+      if(r.oursOk) lastOursOk=clockNow();
+      if(Array.isArray(d.spot)) ptsAt=Date.now();
+      saveCache();
+    }else{
+      oursFails++;
+    }
+  });
+  paint();
 }
 
-function paint(d){
-  renderOurs(d);
-  renderComps(d.competitors);
-  renderChart(d.spot);
+/* B사 예비 직접 읽기 — 서버가 준 B 가 없거나 3시간 넘었을 때만 · 30분에 한 번 이하 (실패해도 그 시각을 기억)
+   Referer 를 안 붙임 (어느 화면이 읽는지 주소가 그쪽 기록에 덜 남게 · CORS 라 Origin 은 붙음) */
+async function maybeDirectB(){
+  if(!CONFIG.B_DIRECT) return;
+  if(!needDirectB(S.rivals && S.rivals.list, clockNow())) return;
+  const since = Date.now() - bDirect.tried;
+  if(since >= 0 && since < CONFIG.B_DIRECT_MS) return;   // (TV 시계가 뒤로 갔으면 다시 읽어도 됨)
+  bDirect.tried = Date.now();
+  saveBDirect();
+  try{
+    const j = await fetchT(B_DIRECT_URL, {cache:'no-store', referrerPolicy:'no-referrer'}, r=>r.json());
+    const c = rivalFromStandard(j, clockNow());
+    if(c){ bDirect.company = c; saveBDirect(); }
+    else console.warn('[board] B사 직접 읽기: 값이 말이 안 됨');
+  }catch(e){
+    console.warn('[board] B사 직접 읽기 실패:', e && e.message);
+  }
 }
 
-paint(DUMMY);
-load();
-setInterval(load,CONFIG.POLL_MS);
-setTimeout(()=>location.reload(),CONFIG.RELOAD_MS);
+/* 타사 시세 — 따로 10분마다 (서버가 30분 캐시). 실패해도 다른 칸은 그대로 */
+async function loadRivals(){
+  if(rivalsLoading) return;
+  rivalsLoading=true;
+  let d=null;
+  try{
+    // 캐시 방식은 기본 (no-cache 는 요청에 max-age=0 을 붙여 Vercel 캐시를 비켜 갈 수 있음)
+    d=await fetchT(`${CONFIG.API_BASE}/api/competitors`, {}, r=>r.json(), CONFIG.COMP_TIMEOUT_MS);
+  }catch(e){
+    console.warn('[board] /api/competitors 실패:',e && e.message);
+  }finally{
+    rivalsLoading=false;
+  }
+  safe('rivals', ()=>{ if(d){ S=mergeRivals(S,d,clockNow()); saveCache(); } });
+  try{ await maybeDirectB(); }catch(e){ console.warn('[board] rivals', e); }
+  safe('comps', ()=>renderComps());
+}
 
-let rz;
-addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>renderChart(lastGood.spot),200);});
+/* 국제 시세 1돈 환산 — 따로 10분마다. 실패해도 다른 칸은 그대로 */
+async function loadSpot(){
+  try{
+    const s=await fetchT(`${CONFIG.API_BASE}/api/spot`, {}, r=>r.json());
+    if(s && s.ok===true){ S.spotNow=s; saveCache(); }
+  }catch(e){
+    console.warn('[board] /api/spot 실패:',e && e.message);
+  }
+  safe('spotNow', ()=>renderSpotNow());
+}
+
+/* 6시간마다 새로고침 — 단, 서버가 안 열리면(매달려도 10초) 하지 않고 5분 뒤 다시 봄
+   (끊긴 채로 새로고침하면 브라우저 오류 화면만 남아 마지막 값도 못 보여 줌) */
+async function safeReload(){
+  try{
+    await fetchT(`${location.pathname}?ping=${Date.now()}`,{cache:'no-store'});
+    location.reload();
+    return;
+  }catch(e){}
+  setTimeout(safeReload,CONFIG.RELOAD_RETRY_MS);
+}
+
+if(!THEME){
+  // 모르는 매장 — 가격도 로고도 없이 안내만 (리턴 값으로 넘어가지 않음)
+  safe('bad', showBadAddress);
+}else{
+  safe('theme', ()=>applyTheme(THEME));
+  S = loadCache();   // 지난번 값 (오늘 받은 것만 가격으로 그림)
+  bDirect = loadBDirect();
+  if(Number.isFinite(S.skew)) skew = S.skew;   // 끊긴 채 켜져도 지난번 시계 차이로 판단
+  paint();
+  load();
+  setInterval(load,CONFIG.POLL_MS);
+  loadRivals();
+  setInterval(loadRivals,CONFIG.COMP_MS);
+  loadSpot();
+  setInterval(loadSpot,CONFIG.SPOT_MS);
+  setInterval(paint,CONFIG.REPAINT_MS);   // 요청이 늦거나 끊겨도 자정·4일·24시간·2시간 규칙은 제때 적용
+  setTimeout(safeReload,CONFIG.RELOAD_MS);
+
+  let rz;
+  addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>safe('chart',()=>renderChart(recentPoints(S.spot && S.spot.points, clockNow()))),200);});
+}
 </script>
 </body>
 </html>
