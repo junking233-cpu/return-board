@@ -12,7 +12,8 @@
                 매장 번호 return 1 · geumsarang 2 · sagyejeol 3
        board  = 시세판 Supabase 의 our_prices (예전에 텔레그램 /시세 가 고치던 표)
                 이제 아무도 안 고침 (/시세 는 안내만 · api/telegram.js) — 되돌리기용으로 마지막 값 그대로 남겨 둠
-     되돌리기: SOURCE.return 한 줄만 'board' 로 (그러면 리턴 TV 는 our_prices 의 마지막 값 · /시세 저장은 telegram.js 에서 따로 켜야 함).
+     되돌리기: SOURCE.return 한 줄만 'board' 로 — 스위치는 이것 하나
+       리턴 TV 는 our_prices 의 마지막 값 · 텔레그램 /시세 저장·예전 안내도 같이 돌아옴 (telegram.js 가 SOURCE.return 을 봄)
      ?src=ledger|board 로 미리 볼 수 있음 (그 밖의 값은 400).
      장부 읽기: GET {LEDGER_URL}/rest/v1/site_rates?select=data&id=eq.N (공개용 publishable 키 · 2.5초 제한)
        → [{data}] 또는 [] (아직 안 넣음). live 를 「이름으로」 찾음. 키 뜻이 서로 반대:
@@ -28,17 +29,23 @@
        updatedAt = data.at, 없으면 data.updated(YYYY.MM.DD) 그날 00:00 KST (그때 oursDateOnly:true) · 둘 다 없으면 틀린 꼴
        꼴이 틀리면(줄·키 없음 · 숫자 아님 · 단위 다름 · 날짜 없음) 그리지 않음 → 못 읽은 것과 같게
        (가짜·반쪽 값 안 냄 · SQL 편집기로 손으로 고쳐 키가 빠져도 손님 화면에 「전부 제품시세적용」이 나가지 않게)
+       값이 말이 안 되면(장부 「손님 시세」 저장 판정 SQL 161 judge 와 같은 규칙) 그리지 않음 → 못 읽은 것과 같게
+         원 단위 정수 · 1돈 1만~500만 · 1kg 10만~5,000만 · 살때(장부 sell) ≥ 팔때(장부 buy)
+         팔때(장부 buy) 골드바 > 18K > 14K
+         (새 화면은 이 판정을 거쳐야 저장됨 · 옛 rpc site_rates_save 와 SQL 편집기는 안 거침 — 그 값이 손님 TV 에 그대로 나가지 않게)
+       리턴(id 1)은 0줄이어도 못 읽은 것 — id 1 은 103 부터 늘 있음 (지우는 길 없음 · 161 되돌리기도 id 1 은 남김)
+         0줄 = 손님 읽기 정책이 빠졌거나(PostgREST 는 오류 대신 200 []) 줄이 지워진 것 → 「아직 안 넣음」으로 가격을 지우지 않음
 
    ── 응답 꼴 ──
    · &v=2 (새 화면): 덩이마다 따로 버팀 · 늘 200 · 경쟁사는 안 읽음 (새 화면은 /api/competitors)
        { v:2, store, now, oursOk, oursEmpty, oursSource, oursDateOnly, updatedAt,
          ours:[…늘 배열…], spotOk, spot:[…]|null (spot=0 이면 두 칸 다 없음), failed }
-       못 읽음 → oursOk:false · ours:[]  /  아직 안 넣음 → oursEmpty:true · ours:[]
+       못 읽음 → oursOk:false · ours:[]  /  아직 안 넣음(금사랑·사계절 첫 저장 전만) → oursEmpty:true · ours:[]
    · 버전 없음 (옛 화면 · 배포 뒤 6시간 새로고침 전까지 떠 있는 리턴 TV): 지금과 똑같은 꼴
        { store, now, updatedAt, ours, competitors, spot, failed }
        ours 줄 꼴도 같음 {label,buy,buyText,sell,sellText} — 장부에서 읽어도 위 짝짓기로 같은 5줄
        store 도 없이 부르면 예전처럼 「다 되거나 500」 (덩이 하나만 null 이어도 옛 화면이 멈추므로)
-         우리 매장 값이 0줄(장부에 아직 없음)이어도 500 — 옛 화면은 빈 표를 그리지 않고 마지막 값 + 끊김 띠
+         우리 매장 값이 0줄이어도 500 — 옛 화면은 빈 표를 그리지 않고 마지막 값 + 끊김 띠 (리턴은 loadOurs 가 이미 실패로 침 · 한 번 더)
        store 를 붙이면 덩이마다 따로 (실패한 덩이는 null · 셋 다 실패면 500)
 
    spot=0 이면 그래프 점을 안 읽음 (화면이 5분에 한 번만 점을 달라고 함 · DB 전송량 줄이기).
@@ -64,10 +71,15 @@ const LEDGER_URL = 'https://odbwpyiavenrwfsjsppk.supabase.co';
 const LEDGER_KEY = 'sb_publishable_vfQOB-gVznQAHNHswDy_jg_-CK6ATiZ';
 // 장부 매장 번호 (설정 표 site_rates_stores 와 같은 값 · 영구히 안 바뀜)
 const LEDGER_ID = { return: 1, geumsarang: 2, sagyejeol: 3 };
-// 우리 매장 시세를 어디서 읽나 — 세 매장 모두 장부 (되돌리기: return 만 'board' = 시세판 our_prices 의 마지막 값)
+// 우리 매장 시세를 어디서 읽나 — 세 매장 모두 장부
+// (되돌리기: return 만 'board' = 시세판 our_prices 의 마지막 값 · 텔레그램 /시세 저장도 이 값을 보고 같이 켜짐)
 export const SOURCE = { return: 'ledger', geumsarang: 'ledger', sagyejeol: 'ledger' };
 const SOURCES = ['ledger', 'board'];
+// 줄이 늘 있는 매장 — 0줄이면 「아직 안 넣음」이 아니라 못 읽은 것 (리턴 id 1 은 103 부터 늘 있음)
+const ALWAYS_ROWS = ['return'];
 const LEDGER_TIMEOUT_MS = 2500;
+// 값 범위 (원) — 장부 「손님 시세」 저장 판정(SQL 161 judge)과 같은 값
+const WON_RANGE = { '1돈': [10000, 5000000], '1kg': [100000, 50000000] };
 // TV 줄 ← 장부 live 이름 (순서는 TV 순서) · 단위 · 판매가(장부 sell)가 꼭 숫자여야 하나
 const LEDGER_ROWS = [
   { label: '골드바 1돈',    live: '골드바 (9999)', unit: '1돈', sellRequired: true },
@@ -140,6 +152,20 @@ export function ledgerView(data) {
     if (!isWon(it.sell)) throw bad(`${live} sell`);
     return { label, buy: it.sell, buyText: null, sell: it.buy, sellText: null };
   });
+  /* 값이 말이 되나 — 장부 저장 판정(SQL 161 judge)과 같은 규칙. 꼴은 맞아도 깨지면 throw (못 읽은 것과 같게 · 마지막 값 + 끊김 띠)
+     여기 rows 는 TV 키 — buy = 장부 sell (우리가 파는 값 · 「내가 살때」) · sell = 장부 buy (우리가 사는 값 · 「내가 팔때」) */
+  const off = what => new Error(`ledger value: ${what}`);
+  const inRange = (n, unit) => Number.isSafeInteger(n) && n >= WON_RANGE[unit][0] && n <= WON_RANGE[unit][1];
+  rows.forEach((r, i) => {
+    const { live, unit } = LEDGER_ROWS[i];
+    if (!inRange(r.sell, unit)) throw off(`${live} buy ${r.sell} — 정수 · 범위(${unit}) 밖`);
+    if (r.buy !== null) {
+      if (!inRange(r.buy, unit)) throw off(`${live} sell ${r.buy} — 정수 · 범위(${unit}) 밖`);
+      if (r.buy < r.sell) throw off(`${live} sell ${r.buy} < buy ${r.sell} (뒤집힘)`);
+    }
+  });
+  const [gold, k18, k14] = rows;
+  if (!(gold.sell > k18.sell && k18.sell > k14.sell)) throw off(`순서 골드바 ${gold.sell} > 18K ${k18.sell} > 14K ${k14.sell} 아님`);
   let updatedAt = null, dateOnly = false;
   const atMs = typeof data.at === 'string' ? Date.parse(data.at) : NaN;
   const ymd = typeof data.updated === 'string' ? /^(\d{4})\.(\d{2})\.(\d{2})$/.exec(data.updated.trim()) : null;
@@ -157,7 +183,7 @@ export function ledgerView(data) {
 /* 우리 매장 시세 → { source, empty, updatedAt, rows, dateOnly }
    ledger: 장부 site_rates (2.5초 제한)
    board : 시세판 our_prices (예전 텔레그램 /시세 가 고치던 표 · 되돌리기용)
-   api/telegram.js 의 /시세 안내도 이 함수로 리턴 값을 읽음 (TV 와 같은 값 · 같은 짝짓기) */
+   api/telegram.js 의 /시세 안내도 이 함수로 리턴 값을 읽음 (TV 와 같은 값 · 같은 짝짓기 · 같은 출처 SOURCE) */
 export async function loadOurs(store, src = SOURCE[store]) {
   // 값을 주소에 끼워 넣으므로 정해진 매장만 (handler 는 이미 거르지만 다른 파일에서도 부르므로 한 번 더)
   if (!STORES.includes(store)) throw new Error(`bad store: ${store}`);
@@ -169,10 +195,16 @@ export async function loadOurs(store, src = SOURCE[store]) {
     if (!r.ok) throw new Error(`ledger ${r.status}`);
     const arr = await r.json();
     if (!Array.isArray(arr)) throw new Error('ledger shape: 배열 아님');
-    if (!arr.length) return { source: 'ledger', empty: true, updatedAt: null, rows: [], dateOnly: false };   // 아직 안 넣음
+    if (!arr.length) {
+      // 리턴 id 1 은 늘 있음 → 0줄은 읽기 정책 빠짐·줄 지워짐 = 못 읽은 것 (TV 가 가격을 지우고 「아직 안 넣음」을 띄우지 않게)
+      if (ALWAYS_ROWS.includes(store)) throw new Error(`ledger: id ${LEDGER_ID[store]} 0줄 (늘 있는 줄)`);
+      return { source: 'ledger', empty: true, updatedAt: null, rows: [], dateOnly: false };   // 아직 안 넣음 (첫 저장 전)
+    }
     return { source: 'ledger', empty: false, ...ledgerView(arr[0] && arr[0].data) };
   }
   const rows = await sb(`our_prices?store=eq.${store}&order=sort_order.asc`);
+  // 되돌렸을 때도 같게 — 리턴 our_prices 5줄도 늘 있음 (0줄 = 읽기 정책 빠짐)
+  if (!rows.length && ALWAYS_ROWS.includes(store)) throw new Error(`our_prices: ${store} 0줄 (늘 있는 줄)`);
   // 우리 매장 대표 갱신 시각 = 가장 최근 행
   const updatedAt = rows.length
     ? rows.reduce((a, b) => (a.updated_at > b.updated_at ? a : b)).updated_at
@@ -282,6 +314,7 @@ export default async function handler(req, res) {
   if (comps.status === 'rejected') { failed.push('competitors'); console.error('[api/prices] competitors', comps.reason); }
   if (spot.status === 'rejected')  { failed.push('spot');        console.error('[api/prices] spot', spot.reason); }
   // 옛 화면은 0줄을 받으면 빈 표를 그림 → store 없는 옛 요청에서는 못 읽은 것과 같게 500 (마지막 값 + 끊김 띠)
+  // (옛 요청은 늘 리턴이라 loadOurs 가 0줄을 이미 실패로 침 — ALWAYS_ROWS 를 바꿔도 옛 화면이 빈 표를 그리지 않게 한 번 더)
   const legacyEmpty = legacy && ours.status === 'fulfilled' && ours.value.empty;
   if (legacyEmpty) console.error('[api/prices] ours 0줄 (옛 요청)', src);
 

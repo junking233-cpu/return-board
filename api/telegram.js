@@ -7,36 +7,46 @@
    그래서 /시세 는 아무 데도 쓰지 않음:
      /시세  ·  /시세 골드바 770000/737000  ·  /시세@봇이름 …  ·  고친 메시지(edited_message)
        → 「시세는 이제 장부 『손님 시세』에서 바꿔요」 + 지금 리턴 TV 값만 답함
-         (값은 loadOurs('return','ledger') — TV 와 같은 길 · 같은 짝짓기 · 장부 공개 키로 읽기만)
+         (값은 loadOurs('return') — TV 와 같은 길 · 같은 출처 · 같은 짝짓기 · 장부 공개 키로 읽기만)
        → 장부를 못 읽으면 「지금 장부 시세를 못 읽었어요 · 장부 『손님 시세』에서 바꿔 주세요」
      /help · /start → 위 안내
 
    되돌리기 (예전처럼 이 방에서 리턴 TV 시세를 바꾸려면):
-     SAVE_FROM_CHAT = true  +  api/prices.js 의 SOURCE.return = 'board'
+     api/prices.js 의 SOURCE.return = 'board' 한 줄만 — 스위치는 그것 하나
+       → 리턴 TV 는 our_prices · 이 파일도 그 값을 보고 /시세 저장·예전 안내(입력법)로 같이 돌아감 (saveFromChatOn)
+       (TV 는 our_prices 인데 /시세 는 「장부에서 바꿔요」 라고 하는 반쪽 되돌리기가 생기지 않게)
      our_prices 표와 저장 코드(sbGet · sbPatch · parse · saveFromChat)는 그래서 지우지 않고 남겨 둠
+     🔴 되돌리면 이 주소로 온 /시세 가 TV 값을 다시 고침 — TELEGRAM_WEBHOOK_SECRET 도 같이 걸어 두길 권함 (아래)
 
    환경변수 (Vercel):
      SUPABASE_URL
      SUPABASE_SERVICE_KEY   ← 쓰기용. anon 키 아님 (되돌렸을 때만 씀)
      TELEGRAM_BOT_TOKEN
      TELEGRAM_CHAT_ID       ← 이 방에서 온 것만 처리
+     TELEGRAM_WEBHOOK_SECRET ← (넣을 때만) 텔레그램이 붙여 보내는 X-Telegram-Bot-Api-Secret-Token 머리글이 이 값과 같아야 처리
+                               setWebhook 에 같은 secret_token 을 준 뒤에 넣을 것 (먼저 넣으면 봇이 모든 말을 무시)
+                               안 넣으면 예전 그대로 (머리글을 안 봄)
 
-   예전 사용법 (SAVE_FROM_CHAT = true 일 때만):
+   예전 사용법 (되돌렸을 때만 · SOURCE.return = 'board'):
      /시세 골드바 770000/737000
      /시세 18k 546000
      /시세 골드바 770000/737000 18k 546000 14k 424000
      /시세                        ← 현재 시세 조회
    ============================================================ */
 
-import { loadOurs } from './prices.js';
+import { loadOurs, SOURCE } from './prices.js';
 
 const SB_URL   = process.env.SUPABASE_URL;
 const SB_KEY   = process.env.SUPABASE_SERVICE_KEY;
 const BOT      = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_OK  = String(process.env.TELEGRAM_CHAT_ID || '');
 
-// /시세 로 our_prices 를 고치던 길 — 꺼 둠 (시세는 장부 한 곳에서). 되돌릴 때만 true
-export const SAVE_FROM_CHAT = false;
+// /시세 로 our_prices 를 고치던 길 — 리턴 TV 가 our_prices 를 읽을 때(SOURCE.return 'board' = 되돌림)만 켜짐
+// 따로 켜고 끄는 스위치를 두지 않음 (TV 출처와 /시세 가 따로 놀면 TV·홈페이지가 소리 없이 달라짐)
+export const saveFromChatOn = () => SOURCE.return === 'board';
+
+// 웹훅 비밀 머리글 (환경변수를 넣었을 때만 봄 · 안 넣으면 예전 그대로)
+const hookSecret = () => String(process.env.TELEGRAM_WEBHOOK_SECRET || '');
 
 /* 별칭 → DB item_key */
 const ALIAS = {
@@ -123,11 +133,12 @@ export function ledgerTable(rows){
 }
 
 // /시세 에 대한 답 글 (아무 데도 안 씀 · 장부를 읽기만). sent = /시세 뒤에 값을 붙여 보냈나
+// 값은 TV 와 같은 출처(SOURCE.return)로 읽음 — 장부가 아닌데 「지금 리턴 TV」라고 장부 값을 보이지 않게
 export async function guideText(sent){
   const head = sent ? `${MOVED}\n${NOT_SAVED}` : MOVED;
   let o;
   try{
-    o = await loadOurs('return', 'ledger');
+    o = await loadOurs('return');
   }catch(err){
     console.error('[api/telegram] 장부 읽기 실패', err);
     return sent ? `${READ_FAIL}\n${NOT_SAVED}` : READ_FAIL;
@@ -148,7 +159,7 @@ TV 는 30초 안에 바뀌어요 (홈페이지도 같은 값).
 이 방에서는 더 바꾸지 않아요.
 /시세  ← 지금 리턴 TV 값 보기`;
 
-/* ---------- 예전 저장 길 (SAVE_FROM_CHAT = true 일 때만) ---------- */
+/* ---------- 예전 저장 길 (되돌렸을 때만 · saveFromChatOn()) ---------- */
 const HELP_SAVE =
 `<b>시세 입력 방법</b>
 
@@ -165,7 +176,7 @@ const HELP_SAVE =
 
 /시세  ← 현재 시세 보기`;
 
-const HELP = SAVE_FROM_CHAT ? HELP_SAVE : HELP_LEDGER;
+const helpText = () => (saveFromChatOn() ? HELP_SAVE : HELP_LEDGER);
 
 /* ---------- 파싱 ---------- */
 function parse(text){
@@ -205,7 +216,7 @@ async function saveFromChat(msg, chatId, text){
   }
 
   if(!items.length){
-    await reply(chatId, `못 알아들었어요.\n\n${HELP}`);
+    await reply(chatId, `못 알아들었어요.\n\n${HELP_SAVE}`);
     return;
   }
 
@@ -248,6 +259,9 @@ async function saveFromChat(msg, chatId, text){
 /* ---------- 핸들러 ---------- */
 export default async function handler(req, res){
   if(req.method !== 'POST') return res.status(200).send('ok');
+  // 비밀 머리글을 걸어 뒀으면 텔레그램이 보낸 것만 (다르면 조용히 무시 · 200)
+  const secret = hookSecret();
+  if(secret && req.headers?.['x-telegram-bot-api-secret-token'] !== secret) return res.status(200).send('ok');
 
   try{
     const msg = req.body?.message || req.body?.edited_message;
@@ -261,11 +275,11 @@ export default async function handler(req, res){
     if(!/^\/(시세|help|start)/.test(text)) return res.status(200).send('ok');
 
     if(/^\/(help|start)/.test(text)){
-      await reply(chatId, HELP);
+      await reply(chatId, helpText());
       return res.status(200).send('ok');
     }
 
-    if(SAVE_FROM_CHAT){
+    if(saveFromChatOn()){
       await saveFromChat(msg, chatId, text);
       return res.status(200).send('ok');
     }
@@ -280,7 +294,7 @@ export default async function handler(req, res){
     try{
       const m = req.body?.message || req.body?.edited_message;
       const chatId = m?.chat?.id;
-      if(chatId) await reply(chatId, SAVE_FROM_CHAT ? `저장 실패: ${err.message}` : `처리 실패: ${err.message}`);
+      if(chatId) await reply(chatId, saveFromChatOn() ? `저장 실패: ${err.message}` : `처리 실패: ${err.message}`);
     }catch{}
     return res.status(200).send('ok');   // 텔레그램 재시도 폭탄 방지
   }
