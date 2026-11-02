@@ -7,11 +7,12 @@
    store 없음 = return (예전 주소 그대로). 정해진 세 값 말고는 400.
 
    ── 우리 매장 시세 출처 (loadOurs) ──
-     SOURCE = { return:'board', geumsarang:'ledger', sagyejeol:'ledger' }
-       board  = 시세판 Supabase 의 our_prices (텔레그램 /시세 가 고침) — 리턴은 아직 이것
-       ledger = 장부 Supabase 의 site_rates (장부 「손님 시세」 · SQL 161)
+     SOURCE = { return:'ledger', geumsarang:'ledger', sagyejeol:'ledger' }   ← 세 매장 모두 장부
+       ledger = 장부 Supabase 의 site_rates (장부 「손님 시세」 · SQL 161) — 시세는 장부 한 곳에서만 바꿈
                 매장 번호 return 1 · geumsarang 2 · sagyejeol 3
-     리턴을 장부로 바꾸는 날은 SOURCE.return 한 줄만 'ledger' 로.
+       board  = 시세판 Supabase 의 our_prices (예전에 텔레그램 /시세 가 고치던 표)
+                이제 아무도 안 고침 (/시세 는 안내만 · api/telegram.js) — 되돌리기용으로 마지막 값 그대로 남겨 둠
+     되돌리기: SOURCE.return 한 줄만 'board' 로 (그러면 리턴 TV 는 our_prices 의 마지막 값 · /시세 저장은 telegram.js 에서 따로 켜야 함).
      ?src=ledger|board 로 미리 볼 수 있음 (그 밖의 값은 400).
      장부 읽기: GET {LEDGER_URL}/rest/v1/site_rates?select=data&id=eq.N (공개용 publishable 키 · 2.5초 제한)
        → [{data}] 또는 [] (아직 안 넣음). live 를 「이름으로」 찾음. 키 뜻이 서로 반대:
@@ -35,7 +36,9 @@
        못 읽음 → oursOk:false · ours:[]  /  아직 안 넣음 → oursEmpty:true · ours:[]
    · 버전 없음 (옛 화면 · 배포 뒤 6시간 새로고침 전까지 떠 있는 리턴 TV): 지금과 똑같은 꼴
        { store, now, updatedAt, ours, competitors, spot, failed }
+       ours 줄 꼴도 같음 {label,buy,buyText,sell,sellText} — 장부에서 읽어도 위 짝짓기로 같은 5줄
        store 도 없이 부르면 예전처럼 「다 되거나 500」 (덩이 하나만 null 이어도 옛 화면이 멈추므로)
+         우리 매장 값이 0줄(장부에 아직 없음)이어도 500 — 옛 화면은 빈 표를 그리지 않고 마지막 값 + 끊김 띠
        store 를 붙이면 덩이마다 따로 (실패한 덩이는 null · 셋 다 실패면 500)
 
    spot=0 이면 그래프 점을 안 읽음 (화면이 5분에 한 번만 점을 달라고 함 · DB 전송량 줄이기).
@@ -61,8 +64,8 @@ const LEDGER_URL = 'https://odbwpyiavenrwfsjsppk.supabase.co';
 const LEDGER_KEY = 'sb_publishable_vfQOB-gVznQAHNHswDy_jg_-CK6ATiZ';
 // 장부 매장 번호 (설정 표 site_rates_stores 와 같은 값 · 영구히 안 바뀜)
 const LEDGER_ID = { return: 1, geumsarang: 2, sagyejeol: 3 };
-// 우리 매장 시세를 어디서 읽나 — 리턴은 아직 텔레그램 our_prices (바꾸는 날 이 한 줄만 'ledger')
-export const SOURCE = { return: 'board', geumsarang: 'ledger', sagyejeol: 'ledger' };
+// 우리 매장 시세를 어디서 읽나 — 세 매장 모두 장부 (되돌리기: return 만 'board' = 시세판 our_prices 의 마지막 값)
+export const SOURCE = { return: 'ledger', geumsarang: 'ledger', sagyejeol: 'ledger' };
 const SOURCES = ['ledger', 'board'];
 const LEDGER_TIMEOUT_MS = 2500;
 // TV 줄 ← 장부 live 이름 (순서는 TV 순서) · 단위 · 판매가(장부 sell)가 꼭 숫자여야 하나
@@ -153,8 +156,11 @@ export function ledgerView(data) {
 
 /* 우리 매장 시세 → { source, empty, updatedAt, rows, dateOnly }
    ledger: 장부 site_rates (2.5초 제한)
-   board : 시세판 our_prices (텔레그램 /시세 가 store=return 줄을 고침) */
+   board : 시세판 our_prices (예전 텔레그램 /시세 가 고치던 표 · 되돌리기용)
+   api/telegram.js 의 /시세 안내도 이 함수로 리턴 값을 읽음 (TV 와 같은 값 · 같은 짝짓기) */
 export async function loadOurs(store, src = SOURCE[store]) {
+  // 값을 주소에 끼워 넣으므로 정해진 매장만 (handler 는 이미 거르지만 다른 파일에서도 부르므로 한 번 더)
+  if (!STORES.includes(store)) throw new Error(`bad store: ${store}`);
   if (src === 'ledger') {
     const r = await fetch(`${LEDGER_URL}/rest/v1/site_rates?select=data&id=eq.${LEDGER_ID[store]}`, {
       headers: { apikey: LEDGER_KEY, Authorization: `Bearer ${LEDGER_KEY}` },
@@ -275,8 +281,11 @@ export default async function handler(req, res) {
   if (ours.status === 'rejected')  { failed.push('ours');        console.error('[api/prices] ours', ours.reason); }
   if (comps.status === 'rejected') { failed.push('competitors'); console.error('[api/prices] competitors', comps.reason); }
   if (spot.status === 'rejected')  { failed.push('spot');        console.error('[api/prices] spot', spot.reason); }
+  // 옛 화면은 0줄을 받으면 빈 표를 그림 → store 없는 옛 요청에서는 못 읽은 것과 같게 500 (마지막 값 + 끊김 띠)
+  const legacyEmpty = legacy && ours.status === 'fulfilled' && ours.value.empty;
+  if (legacyEmpty) console.error('[api/prices] ours 0줄 (옛 요청)', src);
 
-  if (failed.length === (wantSpot ? 3 : 2) || (legacy && failed.length)) {
+  if (failed.length === (wantSpot ? 3 : 2) || (legacy && (failed.length || legacyEmpty))) {
     return res.status(500).json({ error: 'failed to load prices' });
   }
 
